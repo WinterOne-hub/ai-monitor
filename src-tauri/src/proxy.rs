@@ -38,6 +38,15 @@ fn upstream_base(provider: &str) -> Option<&'static str> {
     }
 }
 
+/// Anthropic 兼容端点（/v1/messages 格式）
+fn upstream_anthropic(provider: &str) -> Option<&'static str> {
+    match provider {
+        "deepseek" => Some("https://api.deepseek.com/anthropic/v1/messages"),
+        "moonshot" => Some("https://api.moonshot.cn/anthropic/v1/messages"),
+        _ => None,
+    }
+}
+
 /// 启动本地代理（在 tauri async runtime 中常驻）
 pub fn start(app: tauri::AppHandle) {
     let db_path = app
@@ -91,19 +100,34 @@ async fn handle_provider_catch(
 }
 
 async fn handle_catch(st: ProxyState, provider: String, rest: String, req: Request<Body>) -> Response {
-    let Some(base) = upstream_base(&provider) else {
-        return json_response(
-            StatusCode::BAD_REQUEST,
-            &format!(
-                r#"{{"error":{{"message":"不支持的平台: {provider}","type":"invalid_request_error"}}}}"#
-            ),
-        );
+    let is_messages = rest == "messages";
+    let upstream = if is_messages {
+        match upstream_anthropic(&provider) {
+            Some(u) => u.to_string(),
+            None => {
+                return json_response(
+                    StatusCode::BAD_REQUEST,
+                    &format!(
+                        r#"{{"error":{{"message":"{provider} 暂不支持 Anthropic 格式","type":"invalid_request_error"}}}}"#
+                    ),
+                )
+            }
+        }
+    } else {
+        let Some(base) = upstream_base(&provider) else {
+            return json_response(
+                StatusCode::BAD_REQUEST,
+                &format!(
+                    r#"{{"error":{{"message":"不支持的平台: {provider}","type":"invalid_request_error"}}}}"#
+                ),
+            );
+        };
+        format!("{base}/{rest}")
     };
 
-    let upstream = format!("{base}/{rest}");
     let method = req.method().clone();
     let headers = req.headers().clone();
-    eprintln!("[proxy] {method} /{provider}/v1/{rest}");
+    eprintln!("[proxy] {method} /{provider}/v1/{rest} -> {upstream}");
 
     // 读取 body（仅带 body 的方法）
     let body_bytes = if method == Method::POST || method == Method::PUT || method == Method::PATCH {
@@ -117,11 +141,11 @@ async fn handle_catch(st: ProxyState, provider: String, rest: String, req: Reque
         Vec::new()
     };
 
-    // 转发
+    // 透传全部请求头（含 x-api-key / anthropic-version 等）
     let mut rb = st.client.request(method.clone(), &upstream);
-    for name in ["authorization", "content-type", "accept", "user-agent"] {
-        if let Some(v) = headers.get(name) {
-            rb = rb.header(name, v);
+    for (name, value) in headers.iter() {
+        if name != "host" {
+            rb = rb.header(name, value);
         }
     }
     if !body_bytes.is_empty() {
@@ -145,8 +169,8 @@ async fn handle_catch(st: ProxyState, provider: String, rest: String, req: Reque
         }
     };
 
-    // 仅 chat/completions 成功响应记账
-    if status.is_success() && method == Method::POST && rest == "chat/completions" {
+    // 仅 chat/completions 与 messages 的成功响应记账
+    if status.is_success() && method == Method::POST && (rest == "chat/completions" || is_messages) {
         record_usage(&st, &body_bytes, &bytes).await;
     }
 
@@ -199,25 +223,40 @@ fn parse_usage_from_sse(bytes: &[u8]) -> Option<UsageInfo> {
 }
 
 fn parse_usage_value(u: &Value) -> Option<UsageInfo> {
-    let input = u.get("prompt_tokens")?.as_i64()?;
-    let output = u
-        .get("completion_tokens")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0);
-    let cache_hit = u
-        .get("prompt_cache_hit_tokens")
-        .and_then(|v| v.as_i64())
-        .or_else(|| {
-            u.get("prompt_tokens_details")
-                .and_then(|d| d.get("cached_tokens"))
-                .and_then(|v| v.as_i64())
-        })
-        .unwrap_or(0);
-    Some(UsageInfo {
-        input,
-        output,
-        cache_hit,
-    })
+    // OpenAI 格式：prompt_tokens / completion_tokens
+    if let Some(input) = u.get("prompt_tokens").and_then(|v| v.as_i64()) {
+        let output = u
+            .get("completion_tokens")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        let cache_hit = u
+            .get("prompt_cache_hit_tokens")
+            .and_then(|v| v.as_i64())
+            .or_else(|| {
+                u.get("prompt_tokens_details")
+                    .and_then(|d| d.get("cached_tokens"))
+                    .and_then(|v| v.as_i64())
+            })
+            .unwrap_or(0);
+        return Some(UsageInfo {
+            input,
+            output,
+            cache_hit,
+        });
+    }
+    // Anthropic 格式：input_tokens / output_tokens
+    if let Some(input) = u.get("input_tokens").and_then(|v| v.as_i64()) {
+        let output = u
+            .get("output_tokens")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        return Some(UsageInfo {
+            input,
+            output,
+            cache_hit: 0,
+        });
+    }
+    None
 }
 
 // ---------------- 记账 ----------------
