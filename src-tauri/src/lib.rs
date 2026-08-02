@@ -1,5 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod commands;
+mod proxy;
 mod tray;
 
 use tauri::{Manager, WindowEvent};
@@ -21,19 +22,8 @@ pub fn run() {
         .setup(|app| {
             tray::create_tray(app)?;
 
-            // 启动诊断：打印窗口真实状态
-            for label in ["dashboard", "overlay"] {
-                if let Some(w) = app.get_webview_window(label) {
-                    eprintln!(
-                        "[window] {label}: visible={:?} pos={:?} size={:?}",
-                        w.is_visible().unwrap_or(false),
-                        w.outer_position().ok(),
-                        w.outer_size().ok()
-                    );
-                } else {
-                    eprintln!("[window] {label}: 未找到窗口");
-                }
-            }
+            // 启动统一代理（本地 HTTP，自动记录 token 用量）
+            proxy::start(app.handle().clone());
 
             // 关闭窗口 = 隐藏到托盘，进程常驻
             for label in ["dashboard", "overlay"] {
@@ -65,7 +55,6 @@ pub fn run() {
             commands::http_get_json,
             commands::http_post_json,
             commands::quit_app,
-            commands::log_js,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

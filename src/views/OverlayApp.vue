@@ -289,7 +289,6 @@ function hideOverlay(): void {
 }
 
 onMounted(async () => {
-  void invoke("log_js", { msg: "overlay mounted" });
   await initDb();
   await loadData();
 
@@ -341,13 +340,6 @@ onMounted(async () => {
   startAutoCollect();
   unlistenEvent = await listen(EVENT_BALANCE_UPDATED, () => void loadData());
   void refresh();
-
-  // 诊断：恢复后的实际窗口位置
-  const pos = await win.outerPosition();
-  const sz = await win.outerSize();
-  void invoke("log_js", {
-    msg: `overlay final pos=${pos.x},${pos.y} size=${sz.width}x${sz.height} mode=${mode.value}`,
-  });
 });
 
 onUnmounted(() => {

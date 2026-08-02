@@ -27,4 +27,8 @@ tauri-plugin-autostart = "2.5.1"
 tauri-plugin-notification = "2.3.3"
 keyring = { version = "3", features = ["apple-native"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+tokio = { version = "1", features = ["net"] }
 

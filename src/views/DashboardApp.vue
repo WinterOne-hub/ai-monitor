@@ -301,7 +301,6 @@ async function testWebhookSend(): Promise<void> {
 
 // 开机自启
 const autostartOn = ref(false);
-
 async function toggleAutostart(): Promise<void> {
   try {
     if (autostartOn.value) {
@@ -315,6 +314,19 @@ async function toggleAutostart(): Promise<void> {
     autostartOn.value = !autostartOn.value;
     showToast(`操作失败：${(e as Error).message || String(e)}`);
   }
+}
+
+// 代理模式
+const proxyAccountId = ref<number | null>(null);
+const PROXY_ADDR = "http://127.0.0.1:8899/v1";
+
+async function saveProxy(): Promise<void> {
+  if (!proxyAccountId.value) {
+    showToast("请选择记账账户");
+    return;
+  }
+  await setSetting("proxy_account_id", String(proxyAccountId.value));
+  showToast("代理设置已保存，token 将自动记录到该账户");
 }
 
 function hidePanel(): void {
@@ -331,6 +343,8 @@ onMounted(async () => {
   alertChannel.value = ((await getSetting("alert_webhook_channel")) as WebhookChannel) ?? "serverchan";
   alertWebhookUrl.value = (await getSetting("alert_webhook_url")) ?? "";
   autostartOn.value = await isAutostartEnabled().catch(() => false);
+  const proxySaved = await getSetting("proxy_account_id");
+  proxyAccountId.value = proxySaved ? parseInt(proxySaved, 10) : (accounts.value[0]?.id ?? null);
   usageAccountId.value = accounts.value[0]?.id ?? null;
   await loadUsage();
   await loadTrendAccount();
@@ -571,6 +585,30 @@ onUnmounted(() => {
               <span class="slider"></span>
             </label>
           </div>
+        </div>
+        <div class="panel">
+          <h3>统一代理（自动统计 Token）</h3>
+          <p class="hint">
+            把 API 调用地址改为下面的代理地址，每次调用都会自动记录 token 用量（无需手动登记）。
+          </p>
+          <div class="code-block">
+            {{ PROXY_ADDR }}<span class="code-note">（DeepSeek）</span><br />
+            http://127.0.0.1:8899/moonshot/v1<span class="code-note">（Kimi）</span><br />
+            http://127.0.0.1:8899/siliconflow/v1<span class="code-note">（硅基流动）</span>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Token 记入账户</label>
+            <select v-model="proxyAccountId" class="input select">
+              <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
+                {{ acc.name }}
+              </option>
+            </select>
+            <button class="btn primary" @click="saveProxy">保存</button>
+          </div>
+          <p class="hint">
+            示例：原 <code>base_url=https://api.deepseek.com/v1</code> 改为 <code>{{ PROXY_ADDR }}</code>。
+            代理仅监听本机 127.0.0.1，安全可靠。
+          </p>
         </div>
         <div class="panel">
           <h3>关于</h3>
@@ -884,6 +922,22 @@ onUnmounted(() => {
 }
 .usage-table tr:hover td {
   background: rgba(255, 255, 255, 0.02);
+}
+
+.code-block {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #34d399;
+  line-height: 1.8;
+  margin-bottom: 12px;
+}
+.code-note {
+  color: #6b7280;
+  font-size: 11px;
 }
 
 .hint-inline {
