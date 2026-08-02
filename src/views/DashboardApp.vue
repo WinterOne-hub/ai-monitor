@@ -27,6 +27,11 @@ import { providers, getProvider } from "../providers";
 import BalanceChart from "../components/BalanceChart.vue";
 import { testWebhook as testWebhookFn } from "../core/alert";
 import type { WebhookChannel } from "../core/webhook";
+import {
+  enable as enableAutostart,
+  disable as disableAutostart,
+  isEnabled as isAutostartEnabled,
+} from "@tauri-apps/plugin-autostart";
 
 type Tab = "accounts" | "usage" | "settings";
 
@@ -294,6 +299,24 @@ async function testWebhookSend(): Promise<void> {
   }
 }
 
+// 开机自启
+const autostartOn = ref(false);
+
+async function toggleAutostart(): Promise<void> {
+  try {
+    if (autostartOn.value) {
+      await enableAutostart();
+      showToast("已开启开机自启");
+    } else {
+      await disableAutostart();
+      showToast("已关闭开机自启");
+    }
+  } catch (e) {
+    autostartOn.value = !autostartOn.value;
+    showToast(`操作失败：${(e as Error).message || String(e)}`);
+  }
+}
+
 function hidePanel(): void {
   void invoke("hide_window", { label: "dashboard" });
 }
@@ -307,6 +330,7 @@ onMounted(async () => {
   alertThreshold.value = (await getSetting("alert_balance_threshold")) ?? "20";
   alertChannel.value = ((await getSetting("alert_webhook_channel")) as WebhookChannel) ?? "serverchan";
   alertWebhookUrl.value = (await getSetting("alert_webhook_url")) ?? "";
+  autostartOn.value = await isAutostartEnabled().catch(() => false);
   usageAccountId.value = accounts.value[0]?.id ?? null;
   await loadUsage();
   await loadTrendAccount();
@@ -536,6 +560,16 @@ onUnmounted(() => {
           <div class="form-row">
             <button class="btn primary" @click="saveAlert">保存告警设置</button>
             <span class="hint-inline">系统通知始终开启；冷却 6 小时避免刷屏</span>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>常规</h3>
+          <div class="form-row">
+            <label class="form-label">开机自动启动</label>
+            <label class="switch">
+              <input type="checkbox" v-model="autostartOn" @change="toggleAutostart" />
+              <span class="slider"></span>
+            </label>
           </div>
         </div>
         <div class="panel">
@@ -856,6 +890,44 @@ onUnmounted(() => {
   color: #6b7280;
   font-size: 12px;
   margin-left: 8px;
+}
+
+/* 开关 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 24px;
+  cursor: pointer;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  transition: background 0.2s;
+}
+.slider::before {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.switch input:checked + .slider {
+  background: #10b981;
+}
+.switch input:checked + .slider::before {
+  transform: translateX(18px);
 }
 
 .toast {
