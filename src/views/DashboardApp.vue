@@ -7,6 +7,7 @@ import {
   listAccounts,
   latestBalances,
   todayUsageTotal,
+  saveBalanceSnapshot,
   getSetting,
   setSetting,
   type AccountRow,
@@ -151,6 +152,39 @@ async function saveThreshold(): Promise<void> {
   showToast(`低余额提醒阈值已设为 ¥${v}`);
 }
 
+// 手动登记余额
+const showBalanceModal = ref(false);
+const modalAccount = ref<AccountRow | null>(null);
+const modalBalance = ref("");
+const modalCurrency = ref("CNY");
+
+function openBalanceModal(acc: AccountRow): void {
+  modalAccount.value = acc;
+  modalBalance.value = balances.value[acc.id] ? String(balances.value[acc.id].balance) : "";
+  modalCurrency.value = balances.value[acc.id]?.currency ?? "CNY";
+  showBalanceModal.value = true;
+}
+
+function closeBalanceModal(): void {
+  showBalanceModal.value = false;
+}
+
+async function saveManualBalance(): Promise<void> {
+  if (!modalAccount.value) return;
+  const v = parseFloat(modalBalance.value);
+  if (Number.isNaN(v) || v < 0) {
+    showToast("请输入有效余额");
+    return;
+  }
+  await saveBalanceSnapshot(modalAccount.value.id, {
+    balance: v,
+    currency: modalCurrency.value,
+  });
+  showToast("余额已登记");
+  closeBalanceModal();
+  await loadData();
+}
+
 function hidePanel(): void {
   void invoke("hide_window", { label: "dashboard" });
 }
@@ -258,6 +292,13 @@ onUnmounted(() => {
             </div>
             <div class="acc-actions">
               <button class="btn small" @click="refreshOne(acc)">刷新</button>
+              <button
+                v-if="!getProvider(acc.provider_id)?.balanceSupported"
+                class="btn small"
+                @click="openBalanceModal(acc)"
+              >
+                登记余额
+              </button>
               <button class="btn small danger" @click="removeAccount(acc)">删除</button>
             </div>
           </div>
@@ -314,6 +355,34 @@ onUnmounted(() => {
     </main>
 
     <div v-if="toast" class="toast">{{ toast }}</div>
+
+    <!-- 手动登记余额 -->
+    <div v-if="showBalanceModal" class="modal-mask" @click.self="closeBalanceModal">
+      <div class="modal">
+        <h3>登记余额</h3>
+        <p class="hint">
+          {{ modalAccount?.name }} · {{ getProvider(modalAccount?.provider_id ?? "")?.name }}
+        </p>
+        <div class="form-row">
+          <input
+            v-model="modalBalance"
+            class="input num"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="余额"
+          />
+          <select v-model="modalCurrency" class="input select">
+            <option value="CNY">CNY</option>
+            <option value="USD">USD</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn" @click="closeBalanceModal">取消</button>
+          <button class="btn primary" @click="saveManualBalance">保存</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -582,5 +651,31 @@ onUnmounted(() => {
   font-size: 13px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
   z-index: 100;
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.modal {
+  background: #161a23;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 20px;
+  width: 320px;
+}
+.modal h3 {
+  margin: 0 0 6px;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 </style>

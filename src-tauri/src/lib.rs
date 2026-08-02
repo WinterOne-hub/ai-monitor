@@ -48,6 +48,7 @@ pub fn run() {
             commands::show_window,
             commands::hide_window,
             commands::toggle_window,
+            commands::http_get_json,
             commands::quit_app,
         ])
         .run(tauri::generate_context!())

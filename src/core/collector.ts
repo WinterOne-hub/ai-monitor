@@ -43,7 +43,7 @@ export async function collectAll(): Promise<{ ok: number; failed: number; errors
       ok++;
     } catch (e) {
       failed++;
-      errors.push(`${account.name}: ${(e as Error).message}`);
+      errors.push(`${account.name}: ${(e as Error).message || String(e)}`);
     }
   }
 
