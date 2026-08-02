@@ -63,6 +63,33 @@ pub fn toggle_window(app: tauri::AppHandle, label: String) -> Result<(), String>
     Ok(())
 }
 
+/// 通过 Rust 侧发起 HTTP GET 请求并解析 JSON
+/// 用于规避 webview 的 CORS 限制（各家 AI 平台 API 大多不允许跨域）
+#[tauri::command]
+pub async fn http_get_json(
+    url: String,
+    headers: Vec<(String, String)>,
+) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent("ai-monitor/0.1.0")
+        .build()
+        .map_err(|e| format!("HTTP 客户端初始化失败: {e}"))?;
+
+    let mut req = client.get(&url);
+    for (k, v) in &headers {
+        req = req.header(k, v);
+    }
+
+    let resp = req.send().await.map_err(|e| format!("请求失败: {e}"))?;
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| format!("读取响应失败: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}: {body}"));
+    }
+    serde_json::from_str(&body).map_err(|e| format!("JSON 解析失败: {e}"))
+}
+
 /// 退出应用
 #[tauri::command]
 pub fn quit_app(app: tauri::AppHandle) {

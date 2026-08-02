@@ -1,9 +1,19 @@
 import type { BalanceInfo, Provider } from "./types";
+import { httpGetJson } from "../core/http";
+
+interface DeepSeekBalanceResponse {
+  is_available: boolean;
+  balance_infos?: {
+    currency: string;
+    total_balance: string;
+    granted_balance: string;
+    topped_up_balance: string;
+  }[];
+}
 
 /**
  * DeepSeek 官方余额接口
  * GET https://api.deepseek.com/user/balance
- * Authorization: Bearer <API_KEY>
  */
 export const deepseekProvider: Provider = {
   id: "deepseek",
@@ -12,16 +22,10 @@ export const deepseekProvider: Provider = {
   docs: "https://api-docs.deepseek.com/zh-cn/api/get-user-balance",
 
   async getBalance(apiKey: string): Promise<BalanceInfo> {
-    const resp = await fetch("https://api.deepseek.com/user/balance", {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (!resp.ok) {
-      throw new Error(`DeepSeek 余额查询失败 (${resp.status}): ${await safeText(resp)}`);
-    }
-    const data = (await resp.json()) as {
-      is_available: boolean;
-      balance_infos?: { currency: string; total_balance: string; granted_balance: string; topped_up_balance: string }[];
-    };
+    const data = (await httpGetJson("https://api.deepseek.com/user/balance", {
+      Authorization: `Bearer ${apiKey}`,
+    })) as DeepSeekBalanceResponse;
+
     if (!data.is_available) throw new Error("DeepSeek 账户不可用");
     const info = data.balance_infos?.[0];
     if (!info) throw new Error("DeepSeek 返回数据异常：无 balance_infos");
@@ -35,11 +39,3 @@ export const deepseekProvider: Provider = {
     };
   },
 };
-
-async function safeText(resp: Response): Promise<string> {
-  try {
-    return (await resp.text()).slice(0, 200);
-  } catch {
-    return "";
-  }
-}
