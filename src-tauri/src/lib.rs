@@ -63,6 +63,7 @@ pub fn run() {
             commands::hide_window,
             commands::toggle_window,
             commands::http_get_json,
+            commands::http_post_json,
             commands::quit_app,
             commands::log_js,
         ])
