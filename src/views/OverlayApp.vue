@@ -51,8 +51,24 @@ function fmt(n: number): string {
   });
 }
 
-function fmtTok(n: number): string {
-  return n.toLocaleString("zh-CN");
+/** 紧凑 token 显示：1234 -> 1.2K */
+function compactTok(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+  return String(n);
+}
+
+/** 日期显示：8月3日 */
+function todayLabel(): string {
+  const d = new Date();
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+/** 完整日期（title 提示用） */
+function fullToday(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function statusColor(balance: number): string {
@@ -277,7 +293,8 @@ onUnmounted(() => {
   >
     <span class="c-dot" :class="{ online: !collecting }"></span>
     <span class="c-title">AI</span>
-    <span class="c-arrow">›</span>
+    <span class="c-arrow">‹</span>
+    <span class="c-hint">点我展开</span>
   </div>
 
   <!-- 完整悬浮卡 -->
@@ -308,12 +325,15 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="footer">
-      <span>
-        今日 {{ fmtTok(today.input_tokens) }}/{{ fmtTok(today.output_tokens) }} tok ·
-        ¥{{ fmt(today.cost) }}
+    <div class="footer" :title="`${fullToday()} 今日输入/输出/费用`">
+      <span class="footer-left">
+        <span class="date">{{ todayLabel() }}</span>
+        <span class="tokens">
+          今日 {{ compactTok(today.input_tokens) }}/{{ compactTok(today.output_tokens) }} tok
+        </span>
+        <span class="cost">¥{{ fmt(today.cost) }}</span>
       </span>
-      <span class="time">{{ lastUpdated ? "更新于 " + lastUpdated : "" }}</span>
+      <span class="time">{{ lastUpdated ? "更新 " + lastUpdated : "" }}</span>
     </div>
   </div>
 </template>
@@ -448,9 +468,35 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 7px 10px;
+  gap: 6px;
+  padding: 6px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   color: #9ca3af;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.date {
+  color: #e5e7eb;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.tokens {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cost {
+  color: #fbbf24;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 .footer b {
@@ -460,6 +506,7 @@ onUnmounted(() => {
 .time {
   font-size: 10px;
   color: #6b7280;
+  flex-shrink: 0;
 }
 
 /* 折叠窄条 */
@@ -497,5 +544,23 @@ onUnmounted(() => {
 .c-arrow {
   color: #6b7280;
   font-size: 14px;
+  animation: pulse-x 1.2s ease-in-out infinite;
+}
+.c-hint {
+  font-size: 9px;
+  color: #8b93a7;
+  white-space: nowrap;
+}
+
+@keyframes pulse-x {
+  0%,
+  100% {
+    transform: translateX(-1px);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateX(2px);
+    opacity: 1;
+  }
 }
 </style>
