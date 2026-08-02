@@ -21,6 +21,20 @@ pub fn run() {
         .setup(|app| {
             tray::create_tray(app)?;
 
+            // 启动诊断：打印窗口真实状态
+            for label in ["dashboard", "overlay"] {
+                if let Some(w) = app.get_webview_window(label) {
+                    eprintln!(
+                        "[window] {label}: visible={:?} pos={:?} size={:?}",
+                        w.is_visible().unwrap_or(false),
+                        w.outer_position().ok(),
+                        w.outer_size().ok()
+                    );
+                } else {
+                    eprintln!("[window] {label}: 未找到窗口");
+                }
+            }
+
             // 关闭窗口 = 隐藏到托盘，进程常驻
             for label in ["dashboard", "overlay"] {
                 if let Some(w) = app.get_webview_window(label) {
@@ -50,6 +64,7 @@ pub fn run() {
             commands::toggle_window,
             commands::http_get_json,
             commands::quit_app,
+            commands::log_js,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

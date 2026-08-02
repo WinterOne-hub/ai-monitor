@@ -99,3 +99,9 @@ pub async fn http_get_json(
 pub fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
+
+/// 前端自检日志（调试用）
+#[tauri::command]
+pub fn log_js(msg: String) {
+    println!("[js] {msg}");
+}
