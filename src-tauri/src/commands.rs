@@ -81,10 +81,14 @@ pub async fn http_get_json(
         req = req.header(k, v);
     }
 
-    let resp = req.send().await.map_err(|e| format!("请求失败: {e}"))?;
+    let resp = req.send().await.map_err(|e| {
+        eprintln!("[http_get_json] 请求失败 url={url} err={e}");
+        format!("请求失败: {e}")
+    })?;
     let status = resp.status();
     let body = resp.text().await.map_err(|e| format!("读取响应失败: {e}"))?;
     if !status.is_success() {
+        eprintln!("[http_get_json] HTTP {} url={} body={}", status, url, body);
         return Err(format!("HTTP {status}: {body}"));
     }
     serde_json::from_str(&body).map_err(|e| format!("JSON 解析失败: {e}"))

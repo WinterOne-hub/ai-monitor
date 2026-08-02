@@ -89,9 +89,15 @@ async function addAccount(): Promise<void> {
   }
   adding.value = true;
   try {
-    const { addAccount } = await import("../core/db");
+    const { addAccount, deleteAccount } = await import("../core/db");
     const id = await addAccount(providerId, name);
-    await invoke("save_secret", { account: String(id), secret: key });
+    try {
+      await invoke("save_secret", { account: String(id), secret: key });
+    } catch (e) {
+      // 密钥保存失败时回滚账户，避免留下无密钥的孤儿账户
+      await deleteAccount(id);
+      throw e;
+    }
     if (provider?.balanceSupported) {
       const acc = (await listAccounts()).find((a) => a.id === id);
       if (acc) await collectAccount(acc);
@@ -101,7 +107,7 @@ async function addAccount(): Promise<void> {
     showToast(`已添加账户「${name}」`);
     await loadData();
   } catch (e) {
-    showToast(`添加失败：${(e as Error).message}`);
+    showToast(`添加失败：${(e as Error).message || String(e)}`);
   } finally {
     adding.value = false;
   }
@@ -128,9 +134,13 @@ async function refreshAll(): Promise<void> {
   collecting.value = true;
   try {
     const result = await collectAll();
-    showToast(`刷新完成：成功 ${result.ok}，失败 ${result.failed}`);
+    if (result.failed > 0) {
+      showToast(`刷新失败 ${result.failed} 个：\n${result.errors.slice(0, 3).join("\n")}`);
+    } else {
+      showToast(`刷新完成：成功 ${result.ok} 个`);
+    }
   } catch (e) {
-    showToast(`刷新失败：${(e as Error).message}`);
+    showToast(`刷新失败：${(e as Error).message || String(e)}`);
   }
   collecting.value = false;
   await loadData();
@@ -651,6 +661,8 @@ onUnmounted(() => {
   font-size: 13px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
   z-index: 100;
+  max-width: 80vw;
+  white-space: pre-line;
 }
 
 .modal-mask {
