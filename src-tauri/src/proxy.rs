@@ -1,14 +1,15 @@
 //! 统一代理模式：本地 HTTP 服务，转发 OpenAI 兼容请求到上游平台，
-//! 自动解析每次响应的 usage 并记入 daily_usage 表。
+//! 自动解析每次 chat/completions 响应的 usage 并记入 daily_usage 表。
+//! 采用 catch-all 路由：所有 /v1/* 与 /{provider}/v1/* 路径均透传。
 
 use std::path::PathBuf;
 
 use axum::{
     body::Body,
     extract::{Path, State},
-    http::{HeaderValue, Request, StatusCode},
+    http::{HeaderValue, Method, Request, StatusCode},
     response::Response,
-    routing::post,
+    routing::any,
     Router,
 };
 use serde_json::Value;
@@ -24,15 +25,15 @@ struct ProxyState {
     db_path: PathBuf,
 }
 
-/// OpenAI 兼容平台 -> 真实上游地址
-fn upstream_url(provider: &str) -> Option<&'static str> {
+/// OpenAI 兼容平台 -> 上游 base 地址
+fn upstream_base(provider: &str) -> Option<&'static str> {
     match provider {
-        "deepseek" => Some("https://api.deepseek.com/v1/chat/completions"),
-        "moonshot" => Some("https://api.moonshot.cn/v1/chat/completions"),
-        "siliconflow" => Some("https://api.siliconflow.cn/v1/chat/completions"),
-        "openrouter" => Some("https://openrouter.ai/api/v1/chat/completions"),
-        "openai" => Some("https://api.openai.com/v1/chat/completions"),
-        "zhipu" => Some("https://open.bigmodel.cn/api/paas/v4/chat/completions"),
+        "deepseek" => Some("https://api.deepseek.com/v1"),
+        "moonshot" => Some("https://api.moonshot.cn/v1"),
+        "siliconflow" => Some("https://api.siliconflow.cn/v1"),
+        "openrouter" => Some("https://openrouter.ai/api/v1"),
+        "openai" => Some("https://api.openai.com/v1"),
+        "zhipu" => Some("https://open.bigmodel.cn/api/paas/v4"),
         _ => None,
     }
 }
@@ -55,8 +56,8 @@ pub fn start(app: tauri::AppHandle) {
 
     tauri::async_runtime::spawn(async move {
         let router = Router::new()
-            .route("/v1/chat/completions", post(handle_default))
-            .route("/{provider}/v1/chat/completions", post(handle_provider))
+            .route("/v1/{*rest}", any(handle_default_catch))
+            .route("/{provider}/v1/{*rest}", any(handle_provider_catch))
             .with_state(state.clone());
 
         let listener = match tokio::net::TcpListener::bind(("127.0.0.1", PROXY_PORT)).await {
@@ -73,20 +74,24 @@ pub fn start(app: tauri::AppHandle) {
     });
 }
 
-async fn handle_default(State(st): State<ProxyState>, req: Request<Body>) -> Response {
-    handle_proxy(st, "deepseek".to_string(), req).await
-}
-
-async fn handle_provider(
+async fn handle_default_catch(
     State(st): State<ProxyState>,
-    Path(provider): Path<String>,
+    Path(rest): Path<String>,
     req: Request<Body>,
 ) -> Response {
-    handle_proxy(st, provider, req).await
+    handle_catch(st, "deepseek".to_string(), rest, req).await
 }
 
-async fn handle_proxy(st: ProxyState, provider: String, req: Request<Body>) -> Response {
-    let Some(upstream) = upstream_url(&provider) else {
+async fn handle_provider_catch(
+    State(st): State<ProxyState>,
+    Path((provider, rest)): Path<(String, String)>,
+    req: Request<Body>,
+) -> Response {
+    handle_catch(st, provider, rest, req).await
+}
+
+async fn handle_catch(st: ProxyState, provider: String, rest: String, req: Request<Body>) -> Response {
+    let Some(base) = upstream_base(&provider) else {
         return json_response(
             StatusCode::BAD_REQUEST,
             &format!(
@@ -95,27 +100,35 @@ async fn handle_proxy(st: ProxyState, provider: String, req: Request<Body>) -> R
         );
     };
 
+    let upstream = format!("{base}/{rest}");
+    let method = req.method().clone();
     let headers = req.headers().clone();
-    let body_bytes = match axum::body::to_bytes(req.into_body(), 64 * 1024 * 1024).await {
-        Ok(b) => b.to_vec(),
-        Err(_) => {
-            return json_response(StatusCode::BAD_REQUEST, "{\"error\":{\"message\":\"读取请求体失败\"}}")
+    eprintln!("[proxy] {method} /{provider}/v1/{rest}");
+
+    // 读取 body（仅带 body 的方法）
+    let body_bytes = if method == Method::POST || method == Method::PUT || method == Method::PATCH {
+        match axum::body::to_bytes(req.into_body(), 64 * 1024 * 1024).await {
+            Ok(b) => b.to_vec(),
+            Err(_) => {
+                return json_response(StatusCode::BAD_REQUEST, "{\"error\":{\"message\":\"读取请求体失败\"}}")
+            }
         }
+    } else {
+        Vec::new()
     };
 
-    let auth = headers.get("authorization").cloned();
-    let content_type = headers.get("content-type").cloned();
-
-    let mut rb = st.client.post(upstream);
-    if let Some(a) = auth {
-        rb = rb.header("authorization", a);
+    // 转发
+    let mut rb = st.client.request(method.clone(), &upstream);
+    for name in ["authorization", "content-type", "accept", "user-agent"] {
+        if let Some(v) = headers.get(name) {
+            rb = rb.header(name, v);
+        }
     }
-    if let Some(ct) = content_type {
-        rb = rb.header("content-type", ct);
+    if !body_bytes.is_empty() {
+        rb = rb.body(body_bytes.clone());
     }
-    rb = rb.header("accept", "text/event-stream");
 
-    let resp = match rb.body(body_bytes.clone()).send().await {
+    let resp = match rb.send().await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("[proxy] 上游请求失败: {e}");
@@ -132,7 +145,8 @@ async fn handle_proxy(st: ProxyState, provider: String, req: Request<Body>) -> R
         }
     };
 
-    if status.is_success() {
+    // 仅 chat/completions 成功响应记账
+    if status.is_success() && method == Method::POST && rest == "chat/completions" {
         record_usage(&st, &body_bytes, &bytes).await;
     }
 
@@ -217,12 +231,13 @@ async fn record_usage_to_db(st: &ProxyState, u: UsageInfo) {
     };
 
     // 读取记账账户（设置页选择）
-    let account_id: Option<i64> = sqlx::query_scalar("SELECT value FROM settings WHERE key='proxy_account_id'")
-        .fetch_optional(&pool)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|v: String| v.parse().ok());
+    let account_id: Option<i64> =
+        sqlx::query_scalar("SELECT value FROM settings WHERE key='proxy_account_id'")
+            .fetch_optional(&pool)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|v: String| v.parse().ok());
 
     let Some(account_id) = account_id else {
         pool.close().await;
