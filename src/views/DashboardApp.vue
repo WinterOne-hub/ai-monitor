@@ -8,7 +8,6 @@ import {
   latestBalances,
   todayUsageTotal,
   saveBalanceSnapshot,
-  upsertDailyUsage,
   listRecentUsage,
   getSetting,
   setSetting,
@@ -206,53 +205,11 @@ async function saveManualBalance(): Promise<void> {
   await loadData();
 }
 
-// 用量登记
-const usageAccountId = ref<number | null>(null);
-const usageDate = ref(todayStr());
-const usageInput = ref("");
-const usageOutput = ref("");
-const usageCost = ref("");
+// 用量展示
 const recentUsage = ref<RecentUsageRow[]>([]);
-
-function todayStr(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 
 async function loadUsage(): Promise<void> {
   recentUsage.value = await listRecentUsage(7);
-}
-
-async function saveUsage(): Promise<void> {
-  const accountId = usageAccountId.value ?? accounts.value[0]?.id;
-  if (!accountId) {
-    showToast("请先添加账户");
-    return;
-  }
-  if (!usageDate.value) {
-    showToast("请选择日期");
-    return;
-  }
-  const input = parseInt(usageInput.value, 10) || 0;
-  const output = parseInt(usageOutput.value, 10) || 0;
-  const cost = parseFloat(usageCost.value) || 0;
-  if (input === 0 && output === 0 && cost === 0) {
-    showToast("请至少填写一项数据");
-    return;
-  }
-  await upsertDailyUsage(accountId, usageDate.value, {
-    input,
-    output,
-    cost,
-    source: "manual",
-  });
-  showToast("用量已登记");
-  usageInput.value = "";
-  usageOutput.value = "";
-  usageCost.value = "";
-  await loadData();
-  await loadUsage();
 }
 
 function fmtTok(n: number): string {
@@ -345,7 +302,6 @@ onMounted(async () => {
   autostartOn.value = await isAutostartEnabled().catch(() => false);
   const proxySaved = await getSetting("proxy_account_id");
   proxyAccountId.value = proxySaved ? parseInt(proxySaved, 10) : (accounts.value[0]?.id ?? null);
-  usageAccountId.value = accounts.value[0]?.id ?? null;
   await loadUsage();
   await loadTrendAccount();
   unlisten = await listen(EVENT_BALANCE_UPDATED, () => void loadData());
@@ -488,25 +444,7 @@ onUnmounted(() => {
               <div class="usage-value">¥{{ fmt(today.cost) }}</div>
             </div>
           </div>
-        </div>
-
-        <div class="panel">
-          <h3>登记用量</h3>
-          <div class="form-row">
-            <select v-model="usageAccountId" class="input select">
-              <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
-                {{ acc.name }}
-              </option>
-            </select>
-            <input v-model="usageDate" class="input" type="date" />
-            <input v-model="usageInput" class="input num" type="number" min="0" placeholder="输入 tokens" />
-            <input v-model="usageOutput" class="input num" type="number" min="0" placeholder="输出 tokens" />
-            <input v-model="usageCost" class="input num" type="number" min="0" step="0.01" placeholder="费用 ¥" />
-            <button class="btn primary" @click="saveUsage">登记</button>
-          </div>
-          <p class="hint">
-            从各平台控制台查看今日 token 用量后手动登记；后续将支持统一代理模式自动记录。
-          </p>
+          <p class="hint">token 数据由统一代理自动记录；把调用地址指向 127.0.0.1:8899 即可。</p>
         </div>
 
         <div class="panel">
@@ -589,12 +527,20 @@ onUnmounted(() => {
         <div class="panel">
           <h3>统一代理（自动统计 Token）</h3>
           <p class="hint">
-            把 API 调用地址改为下面的代理地址，每次调用都会自动记录 token 用量（无需手动登记）。
+            代理服务已在本机运行。把<b>调用 AI 的程序</b>（代码 / SDK / 工具）的地址改为下面任意一个，每次调用自动记录 token。
           </p>
           <div class="code-block">
             {{ PROXY_ADDR }}<span class="code-note">（DeepSeek）</span><br />
             http://127.0.0.1:8899/moonshot/v1<span class="code-note">（Kimi）</span><br />
             http://127.0.0.1:8899/siliconflow/v1<span class="code-note">（硅基流动）</span>
+          </div>
+          <p class="hint">接入示例（Python）：</p>
+          <div class="code-block">
+            from openai import OpenAI<br />
+            client = OpenAI(<br />
+            &nbsp;&nbsp;api_key="你的真实key",<br />
+            &nbsp;&nbsp;base_url="http://127.0.0.1:8899/v1",<br />
+            )
           </div>
           <div class="form-row">
             <label class="form-label">Token 记入账户</label>
@@ -605,10 +551,6 @@ onUnmounted(() => {
             </select>
             <button class="btn primary" @click="saveProxy">保存</button>
           </div>
-          <p class="hint">
-            示例：原 <code>base_url=https://api.deepseek.com/v1</code> 改为 <code>{{ PROXY_ADDR }}</code>。
-            代理仅监听本机 127.0.0.1，安全可靠。
-          </p>
         </div>
         <div class="panel">
           <h3>关于</h3>
