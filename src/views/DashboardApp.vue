@@ -8,9 +8,12 @@ import {
   latestBalances,
   todayUsageTotal,
   saveBalanceSnapshot,
+  upsertDailyUsage,
+  listRecentUsage,
   getSetting,
   setSetting,
   type AccountRow,
+  type RecentUsageRow,
 } from "../core/db";
 import {
   collectAll,
@@ -195,6 +198,59 @@ async function saveManualBalance(): Promise<void> {
   await loadData();
 }
 
+// 用量登记
+const usageAccountId = ref<number | null>(null);
+const usageDate = ref(todayStr());
+const usageInput = ref("");
+const usageOutput = ref("");
+const usageCost = ref("");
+const recentUsage = ref<RecentUsageRow[]>([]);
+
+function todayStr(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+async function loadUsage(): Promise<void> {
+  recentUsage.value = await listRecentUsage(7);
+}
+
+async function saveUsage(): Promise<void> {
+  const accountId = usageAccountId.value ?? accounts.value[0]?.id;
+  if (!accountId) {
+    showToast("请先添加账户");
+    return;
+  }
+  if (!usageDate.value) {
+    showToast("请选择日期");
+    return;
+  }
+  const input = parseInt(usageInput.value, 10) || 0;
+  const output = parseInt(usageOutput.value, 10) || 0;
+  const cost = parseFloat(usageCost.value) || 0;
+  if (input === 0 && output === 0 && cost === 0) {
+    showToast("请至少填写一项数据");
+    return;
+  }
+  await upsertDailyUsage(accountId, usageDate.value, {
+    input,
+    output,
+    cost,
+    source: "manual",
+  });
+  showToast("用量已登记");
+  usageInput.value = "";
+  usageOutput.value = "";
+  usageCost.value = "";
+  await loadData();
+  await loadUsage();
+}
+
+function fmtTok(n: number): string {
+  return n.toLocaleString("zh-CN");
+}
+
 function hidePanel(): void {
   void invoke("hide_window", { label: "dashboard" });
 }
@@ -205,6 +261,8 @@ onMounted(async () => {
   await loadData();
   intervalMinutes.value = await getCollectIntervalMinutes();
   lowThreshold.value = (await getSetting("low_balance_threshold")) ?? "20";
+  usageAccountId.value = accounts.value[0]?.id ?? null;
+  await loadUsage();
   unlisten = await listen(EVENT_BALANCE_UPDATED, () => void loadData());
 });
 onUnmounted(() => {
@@ -322,20 +380,63 @@ onUnmounted(() => {
           <div class="usage-grid">
             <div class="usage-item">
               <div class="usage-label">输入 Tokens</div>
-              <div class="usage-value">{{ today.input_tokens.toLocaleString() }}</div>
+              <div class="usage-value">{{ fmtTok(today.input_tokens) }}</div>
             </div>
             <div class="usage-item">
               <div class="usage-label">输出 Tokens</div>
-              <div class="usage-value">{{ today.output_tokens.toLocaleString() }}</div>
+              <div class="usage-value">{{ fmtTok(today.output_tokens) }}</div>
             </div>
             <div class="usage-item">
               <div class="usage-label">估算费用</div>
               <div class="usage-value">¥{{ fmt(today.cost) }}</div>
             </div>
           </div>
+        </div>
+
+        <div class="panel">
+          <h3>登记用量</h3>
+          <div class="form-row">
+            <select v-model="usageAccountId" class="input select">
+              <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
+                {{ acc.name }}
+              </option>
+            </select>
+            <input v-model="usageDate" class="input" type="date" />
+            <input v-model="usageInput" class="input num" type="number" min="0" placeholder="输入 tokens" />
+            <input v-model="usageOutput" class="input num" type="number" min="0" placeholder="输出 tokens" />
+            <input v-model="usageCost" class="input num" type="number" min="0" step="0.01" placeholder="费用 ¥" />
+            <button class="btn primary" @click="saveUsage">登记</button>
+          </div>
           <p class="hint">
-            详细的每日用量报表、趋势图与费用分析将在下一版本上线。目前可在「设置」中登记每日用量。
+            从各平台控制台查看今日 token 用量后手动登记；后续将支持统一代理模式自动记录。
           </p>
+        </div>
+
+        <div class="panel">
+          <h3>最近 7 天记录</h3>
+          <div v-if="recentUsage.length === 0" class="empty-tip">暂无用量记录</div>
+          <table v-else class="usage-table">
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>账户</th>
+                <th>输入</th>
+                <th>输出</th>
+                <th>费用</th>
+                <th>来源</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="u in recentUsage" :key="u.id">
+                <td>{{ u.date }}</td>
+                <td>{{ u.account_name }}</td>
+                <td>{{ fmtTok(u.input_tokens) }}</td>
+                <td>{{ fmtTok(u.output_tokens) }}</td>
+                <td>¥{{ fmt(u.cost) }}</td>
+                <td>{{ u.source === "manual" ? "手动" : u.source }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -631,8 +732,7 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
-}
-.usage-item {
+}.usage-item {
   background: rgba(255, 255, 255, 0.03);
   border-radius: 10px;
   padding: 14px;
@@ -646,6 +746,27 @@ onUnmounted(() => {
   font-size: 18px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.usage-table th,
+.usage-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-variant-numeric: tabular-nums;
+}
+.usage-table th {
+  color: #9ca3af;
+  font-weight: 500;
+  font-size: 12px;
+}
+.usage-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .toast {
