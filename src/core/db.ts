@@ -235,6 +235,33 @@ export async function todayUsageTotal(): Promise<{ input_tokens: number; output_
   return rows[0] ?? { input_tokens: 0, output_tokens: 0, cost: 0 };
 }
 
+/** 最近 N 天各账户用量（跨账户联表） */
+export interface RecentUsageRow {
+  id: number;
+  account_id: number;
+  date: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_hit_tokens: number;
+  cost: number;
+  source: string;
+  account_name: string;
+  provider_id: string;
+}
+
+export async function listRecentUsage(days = 7): Promise<RecentUsageRow[]> {
+  const d = getDb();
+  return d.select<RecentUsageRow[]>(
+    `SELECT u.id, u.account_id, u.date, u.input_tokens, u.output_tokens, u.cache_hit_tokens,
+            u.cost, u.source, a.name AS account_name, a.provider_id
+     FROM daily_usage u
+     INNER JOIN accounts a ON u.account_id = a.id
+     WHERE u.date >= date('now', 'localtime', $1)
+     ORDER BY u.date DESC, u.account_id ASC`,
+    [`-${days} days`]
+  );
+}
+
 // ---------------- settings ----------------
 
 export async function getSetting(key: string): Promise<string | null> {
