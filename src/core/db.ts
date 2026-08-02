@@ -109,9 +109,13 @@ export async function listAccounts(): Promise<AccountRow[]> {
 
 export async function addAccount(providerId: string, name: string): Promise<number> {
   const d = getDb();
-  await d.execute("INSERT INTO accounts (provider_id, name) VALUES ($1, $2)", [providerId, name]);
-  const rows = await d.select<{ id: number }[]>("SELECT last_insert_rowid() AS id");
-  return rows[0].id;
+  // 注意：不能用 SELECT last_insert_rowid()（连接池下可能拿到其他连接的 0），
+  // 必须用 execute 返回的 lastInsertId（插件在同一连接内获取）
+  const result = await d.execute(
+    "INSERT INTO accounts (provider_id, name) VALUES ($1, $2)",
+    [providerId, name]
+  );
+  return result.lastInsertId ?? 0;
 }
 
 export async function deleteAccount(id: number): Promise<void> {
