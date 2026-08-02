@@ -24,6 +24,7 @@ import {
   EVENT_BALANCE_UPDATED,
 } from "../core/collector";
 import { providers, getProvider } from "../providers";
+import BalanceChart from "../components/BalanceChart.vue";
 
 type Tab = "accounts" | "usage" | "settings";
 
@@ -251,6 +252,16 @@ function fmtTok(n: number): string {
   return n.toLocaleString("zh-CN");
 }
 
+// 余额趋势
+const trendAccountId = ref<number | null>(null);
+
+async function loadTrendAccount(): Promise<void> {
+  const accs = await listAccounts();
+  if (trendAccountId.value === null && accs.length > 0) {
+    trendAccountId.value = accs[0].id;
+  }
+}
+
 function hidePanel(): void {
   void invoke("hide_window", { label: "dashboard" });
 }
@@ -263,6 +274,7 @@ onMounted(async () => {
   lowThreshold.value = (await getSetting("low_balance_threshold")) ?? "20";
   usageAccountId.value = accounts.value[0]?.id ?? null;
   await loadUsage();
+  await loadTrendAccount();
   unlisten = await listen(EVENT_BALANCE_UPDATED, () => void loadData());
 });
 onUnmounted(() => {
@@ -313,6 +325,18 @@ onUnmounted(() => {
             <div class="stat-label">今日消耗</div>
             <div class="stat-value">{{ fmt(today.cost) }} <span class="unit">¥</span></div>
           </div>
+        </div>
+
+        <div class="panel">
+          <h3>余额趋势（30 天）</h3>
+          <div class="form-row">
+            <select v-model="trendAccountId" class="input select">
+              <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
+                {{ acc.name }}
+              </option>
+            </select>
+          </div>
+          <BalanceChart :account-id="trendAccountId" />
         </div>
 
         <div class="panel">

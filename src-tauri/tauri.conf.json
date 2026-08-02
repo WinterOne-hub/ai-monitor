@@ -15,8 +15,8 @@
       {
         "label": "overlay",
         "title": "AI Monitor",
-        "width": 300,
-        "height": 196,
+        "width": 320,
+        "height": 64,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
