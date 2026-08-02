@@ -31,7 +31,15 @@ const today = ref<{ input_tokens: number; output_tokens: number; cost: number }>
 const collecting = ref(false);
 const lastUpdated = ref("");
 const lowThreshold = ref(20);
-const collapsed = ref(false);
+
+// 折叠相关状态
+const collapsed = ref(false); // 最终 UI 状态（窄条 or 完整卡）
+const collapsedEdge = ref<"left" | "right" | null>(null);
+const fullVisible = ref(true); // 完整卡片透明度控制（CSS transition）
+const collVisible = ref(false); // 窄条透明度控制
+const animating = ref(false); // 动画进行中
+let suppressSnapUntil = 0; // 抑制贴边折叠的时间戳
+
 let unlistenEvent: UnlistenFn | null = null;
 let unlistenMove: UnlistenFn | null = null;
 let moveTimer: number | null = null;
@@ -53,7 +61,11 @@ function statusColor(balance: number): string {
   return "#34d399";
 }
 
-// ---------- 边缘折叠 ----------
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// ---------- 窗口/折叠 ----------
 
 async function getLogicalMetrics(): Promise<{
   scale: number;
@@ -84,8 +96,82 @@ async function saveOverlayPos(): Promise<void> {
   await setSetting("overlay_pos", JSON.stringify({ x: m.x, y: m.y }));
 }
 
+/** 窗口宽度/位置分步动画（easeOutCubic） */
+async function animateSize(
+  fromW: number,
+  toW: number,
+  fromX: number,
+  toX: number,
+  y: number,
+  duration = 280
+): Promise<void> {
+  const steps = Math.max(6, Math.floor(duration / 30));
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const ease = 1 - Math.pow(1 - t, 3);
+    const w = Math.round(fromW + (toW - fromW) * ease);
+    const x = Math.round(fromX + (toX - fromX) * ease);
+    await win.setSize(new LogicalSize(w, EXPANDED_H));
+    await win.setPosition(new LogicalPosition(x, y));
+    await sleep(30);
+  }
+}
+
+/** 折叠到边缘 */
+async function doCollapse(target: "left" | "right"): Promise<void> {
+  if (animating.value || collapsed.value) return;
+  animating.value = true;
+  suppressSnapUntil = Date.now() + 2000;
+  collapsedEdge.value = target;
+
+  // 1. 完整卡片淡出
+  fullVisible.value = false;
+  await sleep(160);
+
+  // 2. 窗口收缩动画（内容已透明，只看到背景收缩）
+  const m = await getLogicalMetrics();
+  const toX = target === "right" ? Math.max(0, m.screenW - COLLAPSED_W) : 0;
+  await animateSize(m.w, COLLAPSED_W, m.x, toX, m.y);
+
+  // 3. 窄条淡入
+  collapsed.value = true;
+  collVisible.value = true;
+  await sleep(80);
+  animating.value = false;
+
+  await setSetting("overlay_collapsed", "1");
+  await saveOverlayPos();
+}
+
+/** 展开为完整悬浮卡 */
+async function expand(): Promise<void> {
+  if (animating.value || !collapsed.value) return;
+  animating.value = true;
+  suppressSnapUntil = Date.now() + 2000;
+
+  // 1. 窄条淡出
+  collVisible.value = false;
+  await sleep(160);
+
+  // 2. 窗口扩展动画（右对齐保持右缘）
+  const m = await getLogicalMetrics();
+  const toX =
+    collapsedEdge.value === "right" ? Math.max(0, m.screenW - EXPANDED_W) : 0;
+  await animateSize(m.w, EXPANDED_W, m.x, toX, m.y);
+
+  // 3. 完整卡片淡入
+  collapsed.value = false;
+  fullVisible.value = true;
+  await sleep(80);
+  animating.value = false;
+
+  await setSetting("overlay_collapsed", "0");
+  await saveOverlayPos();
+}
+
 /** 拖动结束/位置变化后：贴边则折叠 */
 async function maybeSnapToEdge(): Promise<void> {
+  if (Date.now() < suppressSnapUntil) return;
   const m = await getLogicalMetrics();
   const margin = 24;
   let target: "left" | "right" | null = null;
@@ -93,30 +179,12 @@ async function maybeSnapToEdge(): Promise<void> {
   else if (m.x + m.w >= m.screenW - margin) target = "right";
 
   if (target && !collapsed.value) {
-    // 折叠
-    collapsed.value = true;
-    const x = target === "left" ? 0 : Math.max(0, m.screenW - COLLAPSED_W);
-    await win.setPosition(new LogicalPosition(x, m.y));
-    await win.setSize(new LogicalSize(COLLAPSED_W, EXPANDED_H));
-    await setSetting("overlay_collapsed", "1");
-    await saveOverlayPos();
+    await doCollapse(target);
   } else if (!target && collapsed.value) {
-    // 拖离边缘自动展开
     await expand();
   } else if (!target) {
     await saveOverlayPos();
   }
-}
-
-/** 展开为完整悬浮卡 */
-async function expand(): Promise<void> {
-  const m = await getLogicalMetrics();
-  const x = Math.max(0, Math.min(m.x, Math.max(0, m.screenW - EXPANDED_W)));
-  collapsed.value = false;
-  await win.setSize(new LogicalSize(EXPANDED_W, EXPANDED_H));
-  await win.setPosition(new LogicalPosition(x, m.y));
-  await setSetting("overlay_collapsed", "0");
-  await saveOverlayPos();
 }
 
 // ---------- 数据 ----------
@@ -169,6 +237,10 @@ onMounted(async () => {
     const coll = await getSetting("overlay_collapsed");
     if (coll === "1") {
       collapsed.value = true;
+      fullVisible.value = false;
+      collVisible.value = true;
+      const m = await getLogicalMetrics();
+      collapsedEdge.value = m.x <= m.screenW / 2 ? "left" : "right";
       await win.setSize(new LogicalSize(COLLAPSED_W, EXPANDED_H));
     }
   } catch (e) {
@@ -196,15 +268,20 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- 折叠态：窄条，点击展开 -->
-  <div v-if="collapsed" class="collapsed-bar" @click="expand" title="点击展开">
+  <!-- 折叠窄条：点击展开 -->
+  <div
+    class="collapsed-bar"
+    :class="{ 'fade-out': !collVisible }"
+    @click="expand"
+    title="点击展开"
+  >
     <span class="c-dot" :class="{ online: !collecting }"></span>
     <span class="c-title">AI</span>
     <span class="c-arrow">›</span>
   </div>
 
   <!-- 完整悬浮卡 -->
-  <div v-else class="overlay-card">
+  <div class="overlay-card" :class="{ 'fade-out': !fullVisible }">
     <div class="bar" data-tauri-drag-region>
       <div class="title" data-tauri-drag-region>
         <span class="dot" :class="{ online: !collecting }"></span>
@@ -242,6 +319,16 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.overlay-card,
+.collapsed-bar {
+  transition: opacity 0.16s ease;
+}
+
+.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .overlay-card {
   width: 100%;
   height: 100vh;
