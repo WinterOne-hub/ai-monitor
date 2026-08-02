@@ -9,6 +9,7 @@ import {
   type BalanceInfo,
 } from "./db";
 import { getProvider } from "../providers";
+import { checkAlerts } from "./alert";
 
 export const EVENT_BALANCE_UPDATED = "balance-updated";
 export const EVENT_COLLECT_START = "collect-start";
@@ -52,6 +53,7 @@ export async function collectAll(): Promise<{ ok: number; failed: number; errors
   }
   await emit(EVENT_COLLECT_END, { ok, failed, errors });
   await emit(EVENT_BALANCE_UPDATED);
+  await checkAlerts();
   return { ok, failed, errors };
 }
 

@@ -100,6 +100,37 @@ pub fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// 通过 Rust 侧发起 HTTP POST 请求（用于 Webhook 通知）
+#[tauri::command]
+pub async fn http_post_json(
+    url: String,
+    headers: Vec<(String, String)>,
+    body: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("ai-monitor/0.1.0")
+        .build()
+        .map_err(|e| format!("HTTP 客户端初始化失败: {e}"))?;
+
+    let mut req = client.post(&url);
+    for (k, v) in &headers {
+        req = req.header(k, v);
+    }
+    let resp = req
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {e}"))?;
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| format!("读取响应失败: {e}"))?;
+    if !status.is_success() {
+        eprintln!("[http_post_json] HTTP {} url={} body={}", status, url, text);
+        return Err(format!("HTTP {status}: {text}"));
+    }
+    Ok(serde_json::from_str(&text).unwrap_or(serde_json::Value::Null))
+}
+
 /// 前端自检日志（调试用）
 #[tauri::command]
 pub fn log_js(msg: String) {

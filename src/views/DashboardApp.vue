@@ -25,6 +25,8 @@ import {
 } from "../core/collector";
 import { providers, getProvider } from "../providers";
 import BalanceChart from "../components/BalanceChart.vue";
+import { testWebhook as testWebhookFn } from "../core/alert";
+import type { WebhookChannel } from "../core/webhook";
 
 type Tab = "accounts" | "usage" | "settings";
 
@@ -262,6 +264,36 @@ async function loadTrendAccount(): Promise<void> {
   }
 }
 
+// 告警设置
+const alertThreshold = ref("20");
+const alertChannel = ref<WebhookChannel>("serverchan");
+const alertWebhookUrl = ref("");
+
+async function saveAlert(): Promise<void> {
+  const t = parseFloat(alertThreshold.value);
+  if (Number.isNaN(t) || t < 0) {
+    showToast("请输入有效阈值");
+    return;
+  }
+  await setSetting("alert_balance_threshold", String(t));
+  await setSetting("alert_webhook_channel", alertChannel.value);
+  await setSetting("alert_webhook_url", alertWebhookUrl.value.trim());
+  showToast("告警设置已保存");
+}
+
+async function testWebhookSend(): Promise<void> {
+  if (!alertWebhookUrl.value.trim()) {
+    showToast("请先填写 Webhook URL");
+    return;
+  }
+  try {
+    await testWebhookFn(alertChannel.value, alertWebhookUrl.value.trim());
+    showToast("测试消息已发送，请查看手机/群聊");
+  } catch (e) {
+    showToast(`发送失败：${(e as Error).message || String(e)}`);
+  }
+}
+
 function hidePanel(): void {
   void invoke("hide_window", { label: "dashboard" });
 }
@@ -272,6 +304,9 @@ onMounted(async () => {
   await loadData();
   intervalMinutes.value = await getCollectIntervalMinutes();
   lowThreshold.value = (await getSetting("low_balance_threshold")) ?? "20";
+  alertThreshold.value = (await getSetting("alert_balance_threshold")) ?? "20";
+  alertChannel.value = ((await getSetting("alert_webhook_channel")) as WebhookChannel) ?? "serverchan";
+  alertWebhookUrl.value = (await getSetting("alert_webhook_url")) ?? "";
   usageAccountId.value = accounts.value[0]?.id ?? null;
   await loadUsage();
   await loadTrendAccount();
@@ -477,6 +512,30 @@ onUnmounted(() => {
             <label class="form-label">低余额提醒阈值（¥）</label>
             <input v-model="lowThreshold" class="input num" type="number" min="0" />
             <button class="btn" @click="saveThreshold">保存</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>余额告警</h3>
+          <div class="form-row">
+            <label class="form-label">余额低于（¥）触发通知</label>
+            <input v-model="alertThreshold" class="input num" type="number" min="0" />
+          </div>
+          <div class="form-row">
+            <label class="form-label">Webhook 渠道</label>
+            <select v-model="alertChannel" class="input select">
+              <option value="serverchan">Server酱</option>
+              <option value="feishu">飞书机器人</option>
+              <option value="dingtalk">钉钉机器人</option>
+              <option value="bark">Bark (iOS)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <input v-model="alertWebhookUrl" class="input key" placeholder="Webhook URL（留空则仅系统通知）" />
+            <button class="btn" @click="testWebhookSend">发送测试</button>
+          </div>
+          <div class="form-row">
+            <button class="btn primary" @click="saveAlert">保存告警设置</button>
+            <span class="hint-inline">系统通知始终开启；冷却 6 小时避免刷屏</span>
           </div>
         </div>
         <div class="panel">
@@ -791,6 +850,12 @@ onUnmounted(() => {
 }
 .usage-table tr:hover td {
   background: rgba(255, 255, 255, 0.02);
+}
+
+.hint-inline {
+  color: #6b7280;
+  font-size: 12px;
+  margin-left: 8px;
 }
 
 .toast {
