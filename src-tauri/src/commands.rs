@@ -130,9 +130,3 @@ pub async fn http_post_json(
     }
     Ok(serde_json::from_str(&text).unwrap_or(serde_json::Value::Null))
 }
-
-/// 前端自检日志（调试用）
-#[tauri::command]
-pub fn log_js(msg: String) {
-    println!("[js] {msg}");
-}
