@@ -9,6 +9,13 @@ Built with [Tauri 2](https://tauri.app) — **~6MB installer, ~100MB RAM**. Data
 
 ---
 
+## 📸 Screenshots
+
+<!-- 在这里放截图：悬浮卡胶囊、展开面板、Dashboard（建议 2-3 张） -->
+<!-- 例如：![](screenshots/island.png) ![](screenshots/dashboard.png) -->
+
+---
+
 ## ✨ Features / 功能特性
 
 | | Feature | 说明 |
