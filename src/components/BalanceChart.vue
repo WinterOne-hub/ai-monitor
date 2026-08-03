@@ -52,6 +52,20 @@ async function render(): Promise<void> {
     : now - (props.days ?? 30) * 24 * 3600 * 1000;
   const xMax = now;
 
+  // 时间轴格式：按范围跨度统一（短范围显示时间，长范围显示日期）
+  const spanMs = xMax - xMin;
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const fmtTime = (ts: number): string => {
+    const d = new Date(ts);
+    if (spanMs < 2 * 24 * 3600 * 1000) {
+      return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    }
+    if (spanMs < 31 * 24 * 3600 * 1000) {
+      return `${d.getMonth() + 1}/${d.getDate()}`;
+    }
+    return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
+  };
+
   chart.setOption({
     backgroundColor: "transparent",
     legend: {
@@ -73,7 +87,12 @@ async function render(): Promise<void> {
       max: xMax,
       axisLine: { lineStyle: { color: "rgba(255,255,255,0.12)" } },
       axisTick: { show: false },
-      axisLabel: { color: "#6b7280", fontSize: 10, hideOverlap: true },
+      axisLabel: {
+        color: "#6b7280",
+        fontSize: 10,
+        hideOverlap: true,
+        formatter: (v: number) => fmtTime(v),
+      },
     },
     yAxis: [
       {

@@ -246,6 +246,13 @@ function fmtTok(n: number): string {
 const trendAccountId = ref<number | null>(null);
 const trendRange = ref<"1" | "7" | "30" | "custom">("30");
 const trendStartDate = ref("");
+const trendMinDate = "2010-01-01";
+
+function trendMaxDate(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 function trendDays(): number | undefined {
   if (trendRange.value === "custom") return undefined;
@@ -482,6 +489,8 @@ onUnmounted(() => {
               v-model="trendStartDate"
               class="input"
               type="date"
+              :min="trendMinDate"
+              :max="trendMaxDate()"
             />
           </div>
           <BalanceChart
