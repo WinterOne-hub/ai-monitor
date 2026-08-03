@@ -40,10 +40,13 @@ fn upstream_base(provider: &str) -> Option<&'static str> {
 }
 
 /// Anthropic 兼容端点（/v1/messages 格式）
+/// 注意：siliconflow 官方 Anthropic 兼容端点与 OpenAI 兼容端点同根（/v1/messages）
 fn upstream_anthropic(provider: &str) -> Option<&'static str> {
     match provider {
         "deepseek" => Some("https://api.deepseek.com/anthropic/v1/messages"),
         "moonshot" => Some("https://api.moonshot.cn/anthropic/v1/messages"),
+        "siliconflow" => Some("https://api.siliconflow.cn/v1/messages"),
+        "openrouter" => Some("https://openrouter.ai/api/v1/messages"),
         _ => None,
     }
 }
