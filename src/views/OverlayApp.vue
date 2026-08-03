@@ -495,8 +495,8 @@ onUnmounted(() => {
 }
 .spend {
   color: #f87171;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -601,7 +601,8 @@ onUnmounted(() => {
 }
 .m-cost {
   color: #f87171;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   min-width: 44px;
   text-align: right;
