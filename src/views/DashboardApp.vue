@@ -244,7 +244,7 @@ function fmtTok(n: number): string {
 
 // 余额趋势
 const trendAccountId = ref<number | null>(null);
-const trendRange = ref<"1" | "7" | "30" | "custom">("30");
+const trendRange = ref<"1" | "7" | "30" | "custom">("1");
 const trendStartDate = ref("");
 const trendEndDate = ref("");
 const trendMinDate = "2010-01-01";

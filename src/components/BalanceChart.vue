@@ -90,18 +90,6 @@ async function render(): Promise<void> {
       textStyle: { color: "#e5e7eb", fontSize: 12 },
     },
     grid: { left: 12, right: 12, top: 28, bottom: 8, containLabel: true },
-    graphic: [
-      {
-        type: "text",
-        left: 8,
-        bottom: 4,
-        style: {
-          text: t("dashboard.chartZoomHint"),
-          fill: "#6b7280",
-          fontSize: 10,
-        },
-      },
-    ],
     dataZoom: [
       {
         type: "inside",
@@ -228,12 +216,22 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="chartEl" class="chart"></div>
+  <div class="chart-wrap">
+    <div ref="chartEl" class="chart"></div>
+    <div class="zoom-hint">{{ t("dashboard.chartZoomHint") }}</div>
+  </div>
 </template>
 
 <style scoped>
 .chart {
   width: 100%;
-  height: 240px;
+  height: 232px;
+}
+.zoom-hint {
+  color: #6b7280;
+  font-size: 10px;
+  text-align: center;
+  padding-top: 2px;
+  user-select: none;
 }
 </style>
