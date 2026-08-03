@@ -1,99 +1,203 @@
-# AI Monitor · AI 用量监控
+# AI Monitor
 
-> 🎯 桌面悬浮卡片，实时监控各 AI 平台账户余额与 token 用量
-> 轻量（安装包 ~10MB）· 本地部署 · 开源免费
+> A lightweight desktop overlay that monitors AI platform account balances, token usage & spend in real time.
+> 桌面灵动岛悬浮卡片：实时监控各 AI 平台账户余额、token 用量与消耗金额。
 
-[English](#english) · [中文](#中文)
+![Platform](https://img.shields.io/badge/macOS-Windows-blue) ![Tech](https://img.shields.io/badge/Tauri%202-Vue%203-brightgreen) ![License](https://img.shields.io/badge/License-MIT-green)
+
+Built with [Tauri 2](https://tauri.app) — **~6MB installer, ~100MB RAM**. Data stays **100% local**.
 
 ---
 
-## 中文
+## ✨ Features / 功能特性
 
-### ✨ 功能特性
+| | Feature | 说明 |
+|--|---------|------|
+| 🎴 | **Dynamic Island overlay** | Floating capsule on screen; hover to expand (drawer animation), move away to collapse; drag to screen edge to dock as a half-circle |
+| 💰 | **Multi-platform balance** | Auto query via official APIs: DeepSeek, Kimi (Moonshot), SiliconFlow, OpenRouter |
+| 🔢 | **Token usage tracking** | Built-in local proxy records every API call automatically (OpenAI & Anthropic formats) |
+| 💵 | **Accurate spend** | Cost is derived from **balance diff** (real billing), token×price as backup estimate |
+| 📊 | **Balance trend chart** | 1-day / 7-day / 30-day / custom range |
+| 🚨 | **Alerts** | Low-balance system notifications + Webhook (ServerChan / Feishu / DingTalk / Bark) |
+| 🔒 | **Privacy** | API keys encrypted in OS keychain; all data stored locally |
 
-- 🎴 **灵动岛悬浮卡片**：屏幕顶部居中胶囊，点击展开/收回，拖到边缘折叠为小半圆
-- 💰 **多平台余额监控**：DeepSeek / Kimi / 硅基流动 / OpenRouter 官方接口自动查询；OpenAI / Claude / Gemini 等手动登记
-- 📊 **余额趋势图**：30 天余额曲线，直观看到消耗速度
-- 🔢 **Token 用量统计**：每日输入/输出 token 登记与汇总，费用估算
-- 🚨 **余额告警**：低于阈值触发系统通知 + Webhook（Server酱 / 飞书 / 钉钉 / Bark）
-- 🔒 **安全**：API Key 加密存储于系统钥匙串（macOS Keychain / Windows DPAPI）
-- ⚡ **轻量**：Tauri 2 构建，安装包 ~10MB，常驻内存 ~100MB
+---
 
-### 📦 安装
+## 📦 Installation / 安装
 
-| 平台 | 下载 |
-|------|------|
-| macOS (Intel/Apple Silicon) | [Releases](https://github.com/WinterOne-hub/ai-monitor/releases) 下载 `.dmg` |
-| Windows 10/11 | [Releases](https://github.com/WinterOne-hub/ai-monitor/releases) 下载 `.exe` |
+Download from [Releases](https://github.com/WinterOne-hub/ai-monitor/releases):
 
-> 未签名版本首次打开需右键 → 打开（macOS）或点击"更多信息 → 仍要运行"（Windows）
+- **macOS** (Apple Silicon): `AI.Monitor_*.dmg` → open (right-click → Open if unsigned)
+- **Windows** 10/11: `AI.Monitor_*.exe` → run installer
 
-### 🚀 快速开始
-
-1. 启动应用，主面板添加账户（选择平台，粘贴 API Key）
-2. 支持自动查询的平台（DeepSeek/Kimi/SiliconFlow/OpenRouter）立即拉取余额
-3. 无官方接口的平台可点击「登记余额」手动记录
-4. 悬浮卡片实时显示余额与今日用量；拖到屏幕边缘即收纳
-
-### 🧩 支持平台
-
-| 平台 | 余额自动查询 | 说明 |
-|------|:---:|------|
-| DeepSeek | ✅ | 官方接口 |
-| Kimi (Moonshot) | ✅ | 官方接口 |
-| 硅基流动 SiliconFlow | ✅ | 官方接口 |
-| OpenRouter | ✅ | 官方接口 |
-| 智谱 GLM | ⚠️ | 待接入，手动登记 |
-| OpenAI | ⚠️ | 无官方余额接口，手动登记 |
-| Anthropic Claude | ⚠️ | 无公开接口，手动登记 |
-| Google Gemini | ⚠️ | 需 GCP 账单，手动登记 |
-| 阿里百炼 / 火山方舟 / 百度千帆 | ⚠️ | 云计费体系，手动登记 |
-
-### 🛠 开发
+Or build from source:
 
 ```bash
-# 环境要求：Node.js 18+、Rust stable
+# Requirements: Node.js 18+, Rust (stable)
 npm install
-npm run tauri dev      # 开发运行
-npm run tauri build    # 打包（macOS .dmg / Windows .exe）
+npm run tauri dev      # development
+npm run tauri build    # production bundle
 ```
 
-### 🤝 贡献
+---
 
-欢迎贡献新平台适配器！详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+## 🚀 Quick Start / 快速开始
 
-### 📄 License
+1. Launch the app, open the **Dashboard** (click the island → expand → click ⤢)
+2. Go to **Accounts** tab → select a platform → paste your **API Key** → Add
+3. Platforms with official balance APIs will show balance automatically
+4. The island shows **total balance / today's spend / today's tokens**; hover to expand details per account
+
+---
+
+## 🔌 API Integration / API 接入
+
+### Which platforms can auto-query balance?
+
+| Platform | Balance API | Usage via proxy | Notes |
+|----------|:---:|:---:|-------|
+| DeepSeek | ✅ official | ✅ | Anthropic + OpenAI formats |
+| Kimi (Moonshot) | ✅ official | ✅ | |
+| SiliconFlow | ✅ official | ✅ | |
+| OpenRouter | ✅ official | ✅ | also has usage API |
+| Zhipu GLM | ⚠️ manual | ✅ | balance API TBD |
+| OpenAI | ⚠️ manual | ✅ | no public balance API |
+| Anthropic | ⚠️ manual | ✅ | |
+| Google Gemini | ⚠️ manual | ❌ | needs GCP billing |
+| Alibaba / Volcano / Baidu | ⚠️ manual | ✅ | cloud billing based |
+
+> ⚠️ = balance is registered manually via the **"登记余额"** button.
+
+### Proxy Mode: automatic token tracking / 代理模式：自动统计 token
+
+DeepSeek (and most platforms) do **not** expose a public usage API. To get automatic token/spend tracking, route your API calls through the **built-in local proxy**:
+
+```
+Proxy base URL (本机代理地址):
+  http://127.0.0.1:8899/v1               → DeepSeek (default)
+  http://127.0.0.1:8899/moonshot/v1      → Kimi
+  http://127.0.0.1:8899/siliconflow/v1   → SiliconFlow
+  http://127.0.0.1:8899/openrouter/v1    → OpenRouter
+  http://127.0.0.1:8899/openai/v1        → OpenAI
+```
+
+The proxy forwards every request to the real API, parses the response `usage`, and records it locally. **Your API key stays the same** — only the base URL changes.
+
+#### OpenAI SDK example (Python)
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="sk-your-real-key",                 # same key, unchanged
+    base_url="http://127.0.0.1:8899/v1",        # ← point to AI Monitor proxy
+)
+
+resp = client.chat.completions.create(
+    model="deepseek-chat",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+print(resp.choices[0].message.content)
+```
+
+#### Anthropic SDK example (Python)
+
+```python
+from anthropic import Anthropic
+
+client = Anthropic(
+    api_key="sk-your-real-key",                 # same key, unchanged
+    base_url="http://127.0.0.1:8899/v1",        # ← Anthropic format supported too
+)
+
+resp = client.messages.create(
+    model="deepseek-chat",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello"}],
+)
+print(resp.content[0].text)
+```
+
+#### curl example
+
+```bash
+curl http://127.0.0.1:8899/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-your-real-key" \
+  -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}],"stream":false}'
+```
+
+#### In other tools (e.g. Proma / 其他工具)
+
+Find the **Base URL / API address / 自定义接口** setting and change it to `http://127.0.0.1:8899/v1`. That's it — the app keeps working normally, and every call is recorded automatically.
+
+> 💡 The proxy listens only on `127.0.0.1` (localhost). It does not expose your data to the network.
+
+---
+
+## 📊 How Usage is Calculated / 统计原理
+
+| Metric | Method | Accuracy |
+|--------|--------|----------|
+| **Spend (cost)** | **Balance diff**: first snapshot of the day − last snapshot = real billing | ✅ most accurate |
+| **Tokens** | Parsed from every proxied response `usage` (both streaming & non-streaming) | ✅ |
+| **Estimated cost** | token × model price (configurable in Settings → 模型单价) | backup reference |
+
+> Model prices can be customized in **Settings → 模型单价** (¥ per million tokens). The estimated cost is stored separately as a reference; the primary `cost` always comes from the balance diff.
+
+### Data boundary / 数据边界（重要）
+
+**This app only tracks local activity** — requests that go through the proxy running on the same machine (`127.0.0.1:8899`).
+
+- If you call the same API from another computer, another agent, or a direct connection, **those calls are not counted here**.
+- Balance is a platform-level metric: you can install the app on another machine, add the same key, and still see the balance — but per-device token/spend stats are independent.
+- All data is stored locally (SQLite) in your app data directory; no cloud sync.
+
+---
+
+## ⚙️ Settings / 设置
+
+- **采集间隔**：how often balance is refreshed (default 30 min)
+- **低余额阈值**：low-balance alert threshold
+- **统一代理**：pick which account proxy usage is recorded to; view integration examples
+- **模型单价**：edit model prices for estimated cost
+- **余额告警**：Webhook channel (ServerChan / Feishu / DingTalk / Bark) + test send
+- **开机自启**：launch at login
+
+---
+
+## 🛠 Development / 开发
+
+```bash
+npm install
+npm run tauri dev      # run in dev mode
+npm run tauri build    # bundle .dmg / .exe
+```
+
+Project layout:
+
+```
+src/
+  core/        # db / collector / alerts / webhook / proxy client
+  providers/   # platform adapters (add a platform = add one file)
+  views/       # OverlayApp (island) + DashboardApp
+  components/  # BalanceChart (ECharts)
+src-tauri/
+  src/proxy.rs # local HTTP proxy (axum) — forwards & records usage
+```
+
+---
+
+## 🤝 Contributing / 贡献
+
+Adding a new platform takes ~10 minutes — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## 📄 License / 许可
 
 [MIT](LICENSE)
 
 ---
 
-## English
-
-**AI Monitor** — A lightweight desktop overlay that monitors AI platform account balances & token usage in real time.
-
-### Features
-
-- Dynamic-Island style floating capsule (click to expand, drag to edge to collapse)
-- Auto balance query: DeepSeek / Kimi / SiliconFlow / OpenRouter (official APIs)
-- Manual balance registration for OpenAI / Claude / Gemini etc.
-- 30-day balance trend chart, daily token usage stats, cost estimation
-- Low-balance alerts: system notification + Webhook (ServerChan / Feishu / DingTalk / Bark)
-- API keys encrypted in OS keychain
-- Built with Tauri 2 — ~10MB installer, ~100MB RAM
-
-### Install
-
-Download from [Releases](https://github.com/WinterOne-hub/ai-monitor/releases) (`.dmg` for macOS, `.exe` for Windows).
-
-### Development
-
-```bash
-npm install
-npm run tauri dev
-npm run tauri build
-```
-
-### License
-
-[MIT](LICENSE)
+*Made with [Proma](https://proma.cool)*
