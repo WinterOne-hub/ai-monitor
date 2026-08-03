@@ -9,6 +9,7 @@ import {
   listAccounts,
   latestBalances,
   todayUsageTotal,
+  todayUsageByAccount,
   getSetting,
   setSetting,
   type AccountRow,
@@ -34,6 +35,7 @@ const today = ref<{ input_tokens: number; output_tokens: number; cost: number }>
   output_tokens: 0,
   cost: 0,
 });
+const todayByAccount = ref<Record<number, { input_tokens: number; output_tokens: number; cost: number }>>({});
 const collecting = ref(false);
 const lastUpdated = ref("");
 const lowThreshold = ref(20);
@@ -275,6 +277,12 @@ async function loadData(): Promise<void> {
   }
   balances.value = map;
   today.value = await todayUsageTotal();
+  const byAcc = await todayUsageByAccount();
+  const accMap: Record<number, { input_tokens: number; output_tokens: number; cost: number }> = {};
+  for (const u of byAcc) {
+    accMap[u.account_id] = { input_tokens: u.input_tokens, output_tokens: u.output_tokens, cost: u.cost };
+  }
+  todayByAccount.value = accMap;
   const t = await getSetting("last_collect_at");
   lastUpdated.value = t
     ? new Date(t).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
@@ -365,8 +373,9 @@ onUnmounted(() => {
       <span class="bal" :style="{ color: statusColor(totalBalance) }" data-tauri-drag-region>
         ¥{{ fmt(totalBalance) }}
       </span>
+      <span class="spend" data-tauri-drag-region>-¥{{ fmt(today.cost) }}</span>
       <span class="tok" data-tauri-drag-region>
-        今日 {{ compactTok(today.input_tokens + today.output_tokens) }}
+        {{ compactTok(today.input_tokens + today.output_tokens) }} tok
       </span>
       <span class="chevron">›</span>
     </div>
@@ -394,9 +403,15 @@ onUnmounted(() => {
       </div>
       <div v-for="acc in accounts" v-else :key="acc.id" class="acc-row">
         <div class="acc-name">{{ acc.name }}</div>
-        <div class="acc-bal" :style="{ color: statusColor(balances[acc.id]?.balance ?? 0) }">
-          {{ balances[acc.id] ? fmt(balances[acc.id].balance) : "--" }}
-          <span class="currency">{{ balances[acc.id]?.currency ?? "" }}</span>
+        <div class="acc-metrics">
+          <span class="m-bal" :style="{ color: statusColor(balances[acc.id]?.balance ?? 0) }">
+            {{ balances[acc.id] ? fmt(balances[acc.id].balance) : "--" }}
+          </span>
+          <span class="m-cost">-¥{{ fmt(todayByAccount[acc.id]?.cost ?? 0) }}</span>
+          <span class="m-tok">
+            {{ compactTok((todayByAccount[acc.id]?.input_tokens ?? 0) + (todayByAccount[acc.id]?.output_tokens ?? 0)) }}
+            tok
+          </span>
         </div>
       </div>
     </div>
@@ -489,6 +504,13 @@ onUnmounted(() => {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.spend {
+  color: #f87171;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .tok {
   color: #9ca3af;
   font-size: 11px;
@@ -571,7 +593,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 2px;
+  gap: 8px;
+  padding: 5px 2px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 .acc-row:last-child {
@@ -581,20 +604,38 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 170px;
+  max-width: 90px;
   color: #d1d5db;
   font-size: 12px;
+  flex-shrink: 0;
 }
-.acc-bal {
+.acc-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.m-bal {
   font-weight: 700;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+  min-width: 48px;
+  text-align: right;
 }
-.currency {
-  font-size: 10px;
-  font-weight: 400;
-  opacity: 0.6;
-  margin-left: 2px;
+.m-cost {
+  color: #f87171;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+  text-align: right;
+}
+.m-tok {
+  color: #9ca3af;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-width: 64px;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .expanded-footer {
