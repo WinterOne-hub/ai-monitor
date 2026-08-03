@@ -15,7 +15,7 @@ use axum::{
 use serde_json::Value;
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::SqlitePool;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 pub const PROXY_PORT: u16 = 8899;
 
@@ -23,6 +23,7 @@ pub const PROXY_PORT: u16 = 8899;
 struct ProxyState {
     client: reqwest::Client,
     db_path: PathBuf,
+    app_handle: tauri::AppHandle,
 }
 
 /// OpenAI 兼容平台 -> 上游 base 地址
@@ -61,6 +62,7 @@ pub fn start(app: tauri::AppHandle) {
             .build()
             .expect("failed to build http client"),
         db_path,
+        app_handle: app.clone(),
     };
 
     tauri::async_runtime::spawn(async move {
@@ -347,6 +349,9 @@ async fn record_usage_to_db(st: &ProxyState, provider: &str, model: Option<&str>
     .await;
 
     pool.close().await;
+
+    // 通知前端刷新用量显示
+    let _ = st.app_handle.emit("usage-updated", ());
 }
 
 // ---------------- 响应构建 ----------------

@@ -50,9 +50,11 @@ const animating = ref(false);
 let suppressSnapUntil = 0;
 
 let unlistenEvent: UnlistenFn | null = null;
+let unlistenUsage: UnlistenFn | null = null;
 let unlistenMove: UnlistenFn | null = null;
 let unlistenFocus: UnlistenFn | null = null;
 let moveTimer: number | null = null;
+let uiTimer: ReturnType<typeof setInterval> | null = null;
 
 const totalBalance = computed(() =>
   Object.values(balances.value).reduce((s, b) => s + b.balance, 0)
@@ -347,14 +349,23 @@ onMounted(async () => {
   if (rawThreshold) lowThreshold.value = parseInt(rawThreshold, 10) || 20;
   startAutoCollect();
   unlistenEvent = await listen(EVENT_BALANCE_UPDATED, () => void loadData());
+
+  // 代理记账后即时刷新（Rust emit）
+  unlistenUsage = await listen("usage-updated", () => void loadData());
+
+  // 兜底：每 30 秒刷新一次本地数据（开销极小，保证 UI 实时）
+  uiTimer = setInterval(() => void loadData(), 30_000);
+
   void refresh();
 });
 
 onUnmounted(() => {
   unlistenEvent?.();
+  unlistenUsage?.();
   unlistenMove?.();
   unlistenFocus?.();
   if (moveTimer) window.clearTimeout(moveTimer);
+  if (uiTimer) window.clearInterval(uiTimer);
 });
 </script>
 
