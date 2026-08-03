@@ -93,8 +93,8 @@ async function render(): Promise<void> {
     graphic: [
       {
         type: "text",
-        right: 8,
-        top: 2,
+        left: 8,
+        bottom: 4,
         style: {
           text: t("dashboard.chartZoomHint"),
           fill: "#6b7280",
