@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import * as echarts from "echarts";
 import { useI18n } from "vue-i18n";
-import { balanceSeries, balanceSeriesFrom, usageEventsSeries } from "../core/db";
+import { balanceSeries, balanceSeriesFrom, usageEventsSeries, initDb } from "../core/db";
 
 const props = defineProps<{
   accountId: number | null;
@@ -161,16 +161,34 @@ function handleResize(): void {
   chart?.resize();
 }
 
-onMounted(() => {
+function showError(e: unknown): void {
+  console.error("chart render error", e);
+  if (chart) {
+    chart.clear();
+    chart.setOption({
+      backgroundColor: "transparent",
+      title: {
+        text: `Chart error: ${(e as Error).message || String(e)}`,
+        left: "center",
+        top: "middle",
+        textStyle: { color: "#f87171", fontSize: 11, lineHeight: 18 },
+      },
+    });
+  }
+}
+
+onMounted(async () => {
+  // 确保数据库已初始化（子组件先于父组件挂载）
+  await initDb();
   if (!chartEl.value) return;
   chart = echarts.init(chartEl.value);
-  void render();
+  await render().catch(showError);
   window.addEventListener("resize", handleResize);
 });
 
 watch(
-  () => [props.accountId, props.days, props.startDate],
-  () => void render()
+  () => [props.accountId, props.days, props.startDate, props.endDate],
+  () => void render().catch(showError)
 );
 
 onUnmounted(() => {
