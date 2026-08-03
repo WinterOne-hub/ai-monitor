@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import * as echarts from "echarts";
 import { useI18n } from "vue-i18n";
-import { balanceSeries, balanceSeriesFrom, usageEventsSeries, initDb } from "../core/db";
+import { balanceSeriesFrom, usageEventsFrom, initDb } from "../core/db";
 
 const props = defineProps<{
   accountId: number | null;
@@ -22,14 +22,25 @@ function parseLocal(s: string): number {
 
 async function render(): Promise<void> {
   if (!chart || !props.accountId) return;
-  // 余额快照（保留高时间分辨率）
-  const balRows = props.startDate
-    ? await balanceSeriesFrom(props.accountId, props.startDate)
-    : await balanceSeries(props.accountId, props.days ?? 30);
-  // 每次调用的 token 事件（分钟级）
-  const tokRows = props.startDate
-    ? await usageEventsSeries(props.accountId, 3650)
-    : await usageEventsSeries(props.accountId, props.days ?? 30);
+
+  // 统一用「起止日期」窗口（预设范围也换算成绝对日期，规避 datetime 参数问题）
+  const now = Date.now();
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  let startDateStr: string;
+  if (props.startDate) {
+    startDateStr = props.startDate;
+  } else {
+    const d = new Date(now - (props.days ?? 30) * 24 * 3600 * 1000);
+    startDateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  }
+  const xMin = new Date(startDateStr + "T00:00:00").getTime();
+  const xMax = props.endDate
+    ? new Date(props.endDate + "T23:59:59").getTime()
+    : now;
+
+  // 余额快照 + token 事件（均按起始日期查询）
+  const balRows = await balanceSeriesFrom(props.accountId, startDateStr);
+  const tokRows = await usageEventsFrom(props.accountId, startDateStr);
 
   if (balRows.length === 0 && tokRows.length === 0) {
     chart.clear();
@@ -51,18 +62,8 @@ async function render(): Promise<void> {
     r.input_tokens + r.output_tokens,
   ]);
 
-  // x 轴窗口：按所选范围固定（切换 1/7/30/自定义有明显效果）
-  const now = Date.now();
-  const xMin = props.startDate
-    ? new Date(props.startDate + "T00:00:00").getTime()
-    : now - (props.days ?? 30) * 24 * 3600 * 1000;
-  const xMax = props.endDate
-    ? new Date(props.endDate + "T23:59:59").getTime()
-    : now;
-
   // 时间轴格式：按范围跨度统一（短范围显示时间，长范围显示日期）
   const spanMs = xMax - xMin;
-  const pad2 = (n: number) => String(n).padStart(2, "0");
   const fmtTime = (ts: number): string => {
     const d = new Date(ts);
     if (spanMs < 2 * 24 * 3600 * 1000) {

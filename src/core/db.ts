@@ -245,6 +245,21 @@ export async function usageEventsSeries(
   );
 }
 
+/** 每次调用的 token 事件（分钟级，从指定日期起） */
+export async function usageEventsFrom(
+  accountId: number,
+  startDate: string
+): Promise<{ created_at: string; input_tokens: number; output_tokens: number }[]> {
+  const d = getDb();
+  return d.select<{ created_at: string; input_tokens: number; output_tokens: number }[]>(
+    `SELECT created_at, input_tokens, output_tokens
+     FROM usage_events
+     WHERE account_id = $1 AND date(created_at) >= $2
+     ORDER BY created_at ASC`,
+    [accountId, startDate]
+  );
+}
+
 /** 某账户累计估算消耗（token×单价，用于聚合平台余额推算） */
 export async function accountTotalEstimatedCost(accountId: number): Promise<number> {
   const d = getDb();
