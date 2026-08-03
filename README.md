@@ -137,13 +137,33 @@ Find the **Base URL / API address / 自定义接口** setting and change it to `
 
 ## 📊 How Usage is Calculated / 统计原理
 
+### Single-model platforms vs. aggregator platforms / 单模型平台 vs 聚合平台
+
+The tracking strategy differs by platform type. 不同平台类型的统计方式不同：
+
+| | Single-model platform（单模型平台） | Aggregator platform（聚合平台） |
+|---|---|---|
+| Example | DeepSeek | SiliconFlow / OpenRouter（一余额多模型） |
+| Balance source | Official balance API, **real-time** | API balance is not real-time (coupon/recharge mismatch) |
+| Spend method | **Balance diff**（余额差值 = 真实扣费） | **token × model price**（按模型单价估算） |
+| Balance display | API value directly | Recharge balance − accumulated estimated spend（动态推算） |
+| Model prices | Not needed (balance diff) | **Auto-synced from official site**（每日自动同步全部模型价格） |
+
+**Details / 细节**：
+
+- **Single-model platforms (e.g. DeepSeek)**: the official balance API reflects real-time billing, so **spend = first balance snapshot of the day − last snapshot** (most accurate). Balance is shown directly from the API.
+- **Aggregator platforms (e.g. SiliconFlow)**: one recharge balance is shared across many models and the API value doesn't reflect real-time usage. So:
+  - **Spend** = Σ (token × model price) — parsed from every proxied request, priced per model (87+ SiliconFlow models auto-synced daily from the official pricing page, manual sync available in Settings).
+  - **Displayed balance** = recharge balance − accumulated estimated spend, so it decreases as you consume.
+  - If a model has no configured price, its spend is not counted; add prices in Settings → 模型单价.
+
 | Metric | Method | Accuracy |
 |--------|--------|----------|
-| **Spend (cost)** | **Balance diff**: first snapshot of the day − last snapshot = real billing | ✅ most accurate |
-| **Tokens** | Parsed from every proxied response `usage` (both streaming & non-streaming) | ✅ |
-| **Estimated cost** | token × model price (configurable in Settings → 模型单价) | backup reference |
+| **Spend (single-model)** | Balance diff | ✅ most accurate |
+| **Spend (aggregator)** | token × model price | ✅ good (model-level) |
+| **Tokens** | Parsed from every proxied response `usage` | ✅ |
 
-> Model prices can be customized in **Settings → 模型单价** (¥ per million tokens). The estimated cost is stored separately as a reference; the primary `cost` always comes from the balance diff.
+> Model prices can be customized in **Settings → 模型单价** (¥ per million tokens). The estimated cost is stored separately; balance diff takes priority when available.
 
 ### Data boundary / 数据边界（重要）
 
