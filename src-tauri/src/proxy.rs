@@ -171,7 +171,7 @@ async fn handle_catch(st: ProxyState, provider: String, rest: String, req: Reque
 
     // 仅 chat/completions 与 messages 的成功响应记账
     if status.is_success() && method == Method::POST && (rest == "chat/completions" || is_messages) {
-        record_usage(&st, &body_bytes, &bytes).await;
+        record_usage(&st, &provider, &body_bytes, &bytes).await;
     }
 
     build_response(status, ct, bytes)
@@ -185,7 +185,7 @@ struct UsageInfo {
     cache_hit: i64,
 }
 
-async fn record_usage(st: &ProxyState, req_body: &[u8], resp_body: &[u8]) {
+async fn record_usage(st: &ProxyState, provider: &str, req_body: &[u8], resp_body: &[u8]) {
     let is_stream = String::from_utf8_lossy(req_body).contains("\"stream\":true");
     let usage = if is_stream {
         parse_usage_from_sse(resp_body)
@@ -193,7 +193,11 @@ async fn record_usage(st: &ProxyState, req_body: &[u8], resp_body: &[u8]) {
         parse_usage_from_json(resp_body)
     };
     if let Some(u) = usage {
-        record_usage_to_db(st, u).await;
+        // 从请求体提取 model 名（用于价格匹配）
+        let model = serde_json::from_slice::<Value>(req_body)
+            .ok()
+            .and_then(|v| v.get("model").and_then(|m| m.as_str()).map(|s| s.to_string()));
+        record_usage_to_db(st, provider, model.as_deref(), u).await;
     }
 }
 
@@ -261,7 +265,15 @@ fn parse_usage_value(u: &Value) -> Option<UsageInfo> {
 
 // ---------------- 记账 ----------------
 
-async fn record_usage_to_db(st: &ProxyState, u: UsageInfo) {
+/// 默认单价（元/百万 tokens），可被 price_table 覆盖
+fn default_prices(provider: &str) -> (f64, f64, f64) {
+    match provider {
+        "deepseek" => (2.0, 3.0, 0.2), // 输入/输出/缓存命中
+        _ => (0.0, 0.0, 0.0),
+    }
+}
+
+async fn record_usage_to_db(st: &ProxyState, provider: &str, model: Option<&str>, u: UsageInfo) {
     let opts = SqliteConnectOptions::new()
         .filename(&st.db_path)
         .create_if_missing(false);
@@ -283,19 +295,50 @@ async fn record_usage_to_db(st: &ProxyState, u: UsageInfo) {
         return;
     };
 
+    // 查模型单价（精确匹配，未配置则用默认）
+    let mut input_price = 2.0f64;
+    let mut output_price = 3.0f64;
+    let mut cache_hit_price = 0.2f64;
+    if let Some(model) = model {
+        if let Ok(Some((i, o, c))) = sqlx::query_as::<_, (f64, f64, f64)>(
+            "SELECT input_price, output_price, cache_hit_price FROM price_table WHERE provider_id = ?1 AND model = ?2",
+        )
+        .bind(provider)
+        .bind(model)
+        .fetch_optional(&pool)
+        .await
+        {
+            input_price = i;
+            output_price = o;
+            cache_hit_price = c;
+        } else {
+            let (di, do_, dc) = default_prices(provider);
+            input_price = di;
+            output_price = do_;
+            cache_hit_price = dc;
+        }
+    }
+
+    // 费用 = token * 单价 / 1M
+    let cost = (u.input - u.cache_hit) as f64 * input_price / 1_000_000.0
+        + u.cache_hit as f64 * cache_hit_price / 1_000_000.0
+        + u.output as f64 * output_price / 1_000_000.0;
+
     let _ = sqlx::query(
         "INSERT INTO daily_usage (account_id, date, input_tokens, output_tokens, cache_hit_tokens, cost, source)
-         VALUES (?1, date('now','localtime'), ?2, ?3, ?4, 0, 'proxy')
+         VALUES (?1, date('now','localtime'), ?2, ?3, ?4, ?5, 'proxy')
          ON CONFLICT(account_id, date) DO UPDATE SET
            input_tokens = input_tokens + excluded.input_tokens,
            output_tokens = output_tokens + excluded.output_tokens,
            cache_hit_tokens = cache_hit_tokens + excluded.cache_hit_tokens,
+           cost = cost + excluded.cost,
            source = 'proxy'",
     )
     .bind(account_id)
     .bind(u.input)
     .bind(u.output)
     .bind(u.cache_hit)
+    .bind(cost)
     .execute(&pool)
     .await;
 

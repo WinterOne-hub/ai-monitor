@@ -11,8 +11,11 @@ import {
   listRecentUsage,
   getSetting,
   setSetting,
+  listPrices,
+  upsertPrice,
   type AccountRow,
   type RecentUsageRow,
+  type PriceRow,
 } from "../core/db";
 import {
   collectAll,
@@ -286,6 +289,43 @@ async function saveProxy(): Promise<void> {
   showToast("代理设置已保存，token 将自动记录到该账户");
 }
 
+// 模型单价管理
+const prices = ref<PriceRow[]>([]);
+const priceProvider = ref("deepseek");
+const priceModel = ref("");
+const priceInput = ref("2");
+const priceOutput = ref("3");
+const priceCache = ref("0.2");
+
+async function loadPrices(): Promise<void> {
+  prices.value = await listPrices();
+}
+
+async function addPrice(): Promise<void> {
+  const model = priceModel.value.trim();
+  if (!model) {
+    showToast("请填写模型名");
+    return;
+  }
+  const input = parseFloat(priceInput.value);
+  const output = parseFloat(priceOutput.value);
+  const cache = parseFloat(priceCache.value);
+  if ([input, output, cache].some((v) => Number.isNaN(v) || v < 0)) {
+    showToast("请输入有效单价（元/百万 tokens）");
+    return;
+  }
+  await upsertPrice({
+    providerId: priceProvider.value,
+    model,
+    inputPrice: input,
+    outputPrice: output,
+    cacheHitPrice: cache,
+  });
+  showToast(`已保存 ${model} 单价`);
+  priceModel.value = "";
+  await loadPrices();
+}
+
 function hidePanel(): void {
   void invoke("hide_window", { label: "dashboard" });
 }
@@ -302,6 +342,7 @@ onMounted(async () => {
   autostartOn.value = await isAutostartEnabled().catch(() => false);
   const proxySaved = await getSetting("proxy_account_id");
   proxyAccountId.value = proxySaved ? parseInt(proxySaved, 10) : (accounts.value[0]?.id ?? null);
+  await loadPrices();
   await loadUsage();
   await loadTrendAccount();
   unlisten = await listen(EVENT_BALANCE_UPDATED, () => void loadData());
@@ -551,6 +592,40 @@ onUnmounted(() => {
             </select>
             <button class="btn primary" @click="saveProxy">保存</button>
           </div>
+        </div>
+        <div class="panel">
+          <h3>模型单价（元/百万 tokens，用于金额统计）</h3>
+          <table class="usage-table">
+            <thead>
+              <tr>
+                <th>平台</th>
+                <th>模型</th>
+                <th>输入</th>
+                <th>输出</th>
+                <th>缓存命中</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in prices" :key="p.id">
+                <td>{{ p.provider_id }}</td>
+                <td>{{ p.model }}</td>
+                <td>¥{{ p.input_price }}</td>
+                <td>¥{{ p.output_price }}</td>
+                <td>¥{{ p.cache_hit_price }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="form-row">
+            <select v-model="priceProvider" class="input select">
+              <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+            <input v-model="priceModel" class="input" placeholder="模型名，如 deepseek-chat" />
+            <input v-model="priceInput" class="input num" type="number" min="0" step="0.01" placeholder="输入" />
+            <input v-model="priceOutput" class="input num" type="number" min="0" step="0.01" placeholder="输出" />
+            <input v-model="priceCache" class="input num" type="number" min="0" step="0.01" placeholder="缓存" />
+            <button class="btn primary" @click="addPrice">添加/更新</button>
+          </div>
+          <p class="hint">代理记账按此单价实时计算费用；未配置的模型使用平台默认价。</p>
         </div>
         <div class="panel">
           <h3>关于</h3>

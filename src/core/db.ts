@@ -84,6 +84,19 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- 模型单价种子（元/百万 tokens，可在设置中修改）
+INSERT OR IGNORE INTO price_table (provider_id, model, input_price, output_price, cache_hit_price, currency) VALUES
+('deepseek', 'deepseek-chat', 2.0, 3.0, 0.2, 'CNY'),
+('deepseek', 'deepseek-v4-flash', 2.0, 3.0, 0.2, 'CNY'),
+('deepseek', 'deepseek-v4-pro', 2.0, 3.0, 0.2, 'CNY');
+
+-- 回填历史费用（按默认 DeepSeek 单价估算历史 proxy 记录）
+UPDATE daily_usage
+SET cost = (input_tokens - cache_hit_tokens) * 2.0 / 1000000
+        + cache_hit_tokens * 0.2 / 1000000
+        + output_tokens * 3.0 / 1000000
+WHERE cost = 0 AND source = 'proxy' AND date >= date('now', 'localtime', '-30 days');
 `;
 
 let db: Database | null = null;
@@ -276,5 +289,42 @@ export async function setSetting(key: string, value: string): Promise<void> {
     `INSERT INTO settings (key, value) VALUES ($1, $2)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
     [key, value]
+  );
+}
+
+// ---------------- price_table --------------
+
+export interface PriceRow {
+  id: number;
+  provider_id: string;
+  model: string;
+  input_price: number;
+  output_price: number;
+  cache_hit_price: number;
+  currency: string;
+}
+
+export async function listPrices(): Promise<PriceRow[]> {
+  const d = getDb();
+  return d.select<PriceRow[]>("SELECT * FROM price_table ORDER BY provider_id, model");
+}
+
+export async function upsertPrice(p: {
+  providerId: string;
+  model: string;
+  inputPrice: number;
+  outputPrice: number;
+  cacheHitPrice: number;
+  currency?: string;
+}): Promise<void> {
+  const d = getDb();
+  await d.execute(
+    `INSERT INTO price_table (provider_id, model, input_price, output_price, cache_hit_price, currency)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT(provider_id, model) DO UPDATE SET
+       input_price = excluded.input_price,
+       output_price = excluded.output_price,
+       cache_hit_price = excluded.cache_hit_price`,
+    [p.providerId, p.model, p.inputPrice, p.outputPrice, p.cacheHitPrice, p.currency ?? "CNY"]
   );
 }
