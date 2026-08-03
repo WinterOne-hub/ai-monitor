@@ -193,6 +193,17 @@ export async function balanceSeries(accountId: number, days = 30): Promise<Balan
   );
 }
 
+/** 某账户从指定日期起的余额趋势（自定义范围） */
+export async function balanceSeriesFrom(accountId: number, startDate: string): Promise<BalanceRow[]> {
+  const d = getDb();
+  return d.select<BalanceRow[]>(
+    `SELECT * FROM balance_snapshots
+     WHERE account_id = $1 AND date(fetched_at) >= $2
+     ORDER BY fetched_at ASC`,
+    [accountId, startDate]
+  );
+}
+
 // ---------------- daily usage ----------------
 
 export async function upsertDailyUsage(
