@@ -23,8 +23,8 @@
 
 | 平台 | 下载 |
 |------|------|
-| macOS (Intel/Apple Silicon) | [Releases](https://github.com/proma-ai/ai-monitor/releases) 下载 `.dmg` |
-| Windows 10/11 | [Releases](https://github.com/proma-ai/ai-monitor/releases) 下载 `.exe` |
+| macOS (Intel/Apple Silicon) | [Releases](https://github.com/WinterOne-hub/ai-monitor/releases) 下载 `.dmg` |
+| Windows 10/11 | [Releases](https://github.com/WinterOne-hub/ai-monitor/releases) 下载 `.exe` |
 
 > 未签名版本首次打开需右键 → 打开（macOS）或点击"更多信息 → 仍要运行"（Windows）
 
@@ -84,7 +84,7 @@ npm run tauri build    # 打包（macOS .dmg / Windows .exe）
 
 ### Install
 
-Download from [Releases](https://github.com/proma-ai/ai-monitor/releases) (`.dmg` for macOS, `.exe` for Windows).
+Download from [Releases](https://github.com/WinterOne-hub/ai-monitor/releases) (`.dmg` for macOS, `.exe` for Windows).
 
 ### Development
 

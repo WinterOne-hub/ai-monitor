@@ -52,7 +52,7 @@ npm run tauri dev    # 启动应用，添加账户测试
 
 ## 其他贡献方式
 
-- 🐛 提交 [Issue](https://github.com/proma-ai/ai-monitor/issues)（bug / 新平台请求 / 功能建议）
+- 🐛 提交 [Issue](https://github.com/WinterOne-hub/ai-monitor/issues)（bug / 新平台请求 / 功能建议）
 - 🧪 帮忙测试不同平台、不同 macOS/Windows 版本
 - 📝 完善文档、翻译
 
