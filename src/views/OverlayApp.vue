@@ -10,6 +10,7 @@ import {
   latestBalances,
   todayUsageTotal,
   todayUsageByAccount,
+  accountTotalEstimatedCost,
   getSetting,
   setSetting,
   type AccountRow,
@@ -297,6 +298,16 @@ async function loadData(): Promise<void> {
   const map: Record<number, { balance: number; currency: string }> = {};
   for (const lb of lbs) {
     map[lb.account_id] = { balance: lb.balance, currency: lb.currency };
+  }
+  // 聚合平台余额推算：充值余额 - 累计估算消耗（硅基流动 API 余额不实时）
+  for (const acc of accounts.value) {
+    if (acc.provider_id === "siliconflow") {
+      const cur = map[acc.id];
+      if (cur) {
+        const est = await accountTotalEstimatedCost(acc.id);
+        cur.balance = Math.max(0, cur.balance - est);
+      }
+    }
   }
   balances.value = map;
   today.value = await todayUsageTotal();

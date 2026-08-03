@@ -204,6 +204,16 @@ export async function balanceSeriesFrom(accountId: number, startDate: string): P
   );
 }
 
+/** 某账户累计估算消耗（token×单价，用于聚合平台余额推算） */
+export async function accountTotalEstimatedCost(accountId: number): Promise<number> {
+  const d = getDb();
+  const rows = await d.select<{ total: number }[]>(
+    "SELECT COALESCE(SUM(cost_estimated), 0) AS total FROM daily_usage WHERE account_id = $1",
+    [accountId]
+  );
+  return rows[0]?.total ?? 0;
+}
+
 // ---------------- daily usage ----------------
 
 export async function upsertDailyUsage(

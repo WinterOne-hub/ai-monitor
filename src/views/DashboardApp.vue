@@ -9,6 +9,7 @@ import {
   todayUsageTotal,
   saveBalanceSnapshot,
   listRecentUsage,
+  accountTotalEstimatedCost,
   getSetting,
   setSetting,
   listPrices,
@@ -93,6 +94,16 @@ async function loadData(): Promise<void> {
       currency: lb.currency,
       fetched_at: lb.fetched_at,
     };
+  }
+  // 聚合平台余额推算：充值余额 - 累计估算消耗
+  for (const acc of accounts.value) {
+    if (acc.provider_id === "siliconflow") {
+      const cur = map[acc.id];
+      if (cur) {
+        const est = await accountTotalEstimatedCost(acc.id);
+        cur.balance = Math.max(0, cur.balance - est);
+      }
+    }
   }
   balances.value = map;
   today.value = await todayUsageTotal();
