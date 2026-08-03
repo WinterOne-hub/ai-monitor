@@ -89,7 +89,30 @@ async function render(): Promise<void> {
       borderColor: "rgba(255,255,255,0.1)",
       textStyle: { color: "#e5e7eb", fontSize: 12 },
     },
-    grid: { left: 12, right: 12, top: 28, bottom: 8, containLabel: true },
+    grid: { left: 12, right: 12, top: 28, bottom: 30, containLabel: true },
+    dataZoom: [
+      // 鼠标滚轮 / 触摸板缩放
+      { type: "inside", xAxisIndex: 0, start: 0, end: 100 },
+      // 底部滑块：拖动两端自由拉伸时间轴
+      {
+        type: "slider",
+        xAxisIndex: 0,
+        start: 0,
+        end: 100,
+        height: 18,
+        bottom: 4,
+        borderColor: "rgba(255,255,255,0.1)",
+        backgroundColor: "rgba(255,255,255,0.03)",
+        fillerColor: "rgba(52,211,153,0.15)",
+        handleStyle: { color: "#34d399", borderColor: "#34d399" },
+        moveHandleStyle: { color: "#34d399" },
+        textStyle: { color: "#9ca3af", fontSize: 10 },
+        dataBackground: {
+          lineStyle: { color: "rgba(96,165,250,0.4)" },
+          areaStyle: { color: "rgba(96,165,250,0.1)" },
+        },
+      },
+    ],
     xAxis: {
       type: "time",
       min: xMin,
