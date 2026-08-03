@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import * as echarts from "echarts";
-import { balanceSeries } from "../core/db";
+import { balanceSeries, balanceSeriesFrom } from "../core/db";
 
-const props = defineProps<{ accountId: number | null }>();
+const props = defineProps<{
+  accountId: number | null;
+  days?: number;
+  startDate?: string;
+}>();
 
 const chartEl = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
 
 async function render(): Promise<void> {
   if (!chart || !props.accountId) return;
-  const rows = await balanceSeries(props.accountId, 30);
+  const rows = props.startDate
+    ? await balanceSeriesFrom(props.accountId, props.startDate)
+    : await balanceSeries(props.accountId, props.days ?? 30);
   if (rows.length === 0) {
     chart.clear();
     chart.setOption({
@@ -82,7 +88,7 @@ onMounted(() => {
 });
 
 watch(
-  () => props.accountId,
+  () => [props.accountId, props.days, props.startDate],
   () => void render()
 );
 

@@ -221,11 +221,29 @@ function fmtTok(n: number): string {
 
 // 余额趋势
 const trendAccountId = ref<number | null>(null);
+const trendRange = ref<"1" | "7" | "30" | "custom">("30");
+const trendStartDate = ref("");
+
+function trendDays(): number | undefined {
+  if (trendRange.value === "custom") return undefined;
+  return Number(trendRange.value);
+}
+
+function trendStart(): string | undefined {
+  return trendRange.value === "custom" ? trendStartDate.value : undefined;
+}
 
 async function loadTrendAccount(): Promise<void> {
   const accs = await listAccounts();
   if (trendAccountId.value === null && accs.length > 0) {
     trendAccountId.value = accs[0].id;
+  }
+  // 自定义默认起始日期：30 天前
+  if (!trendStartDate.value) {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    trendStartDate.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 }
 
@@ -398,15 +416,31 @@ onUnmounted(() => {
         </div>
 
         <div class="panel">
-          <h3>余额趋势（30 天）</h3>
+          <h3>余额趋势</h3>
           <div class="form-row">
             <select v-model="trendAccountId" class="input select">
               <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
                 {{ acc.name }}
               </option>
             </select>
+            <select v-model="trendRange" class="input select">
+              <option value="1">近 1 日</option>
+              <option value="7">近 7 日</option>
+              <option value="30">近 30 日</option>
+              <option value="custom">自定义</option>
+            </select>
+            <input
+              v-if="trendRange === 'custom'"
+              v-model="trendStartDate"
+              class="input"
+              type="date"
+            />
           </div>
-          <BalanceChart :account-id="trendAccountId" />
+          <BalanceChart
+            :account-id="trendAccountId"
+            :days="trendDays()"
+            :start-date="trendStart()"
+          />
         </div>
 
         <div class="panel">
