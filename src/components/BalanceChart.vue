@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import * as echarts from "echarts";
-import { balanceSeries, balanceSeriesFrom, dailyUsageSeries } from "../core/db";
+import { balanceSeries, balanceSeriesFrom, usageEventsSeries } from "../core/db";
 
 const props = defineProps<{
   accountId: number | null;
@@ -18,12 +18,12 @@ async function render(): Promise<void> {
   const balRows = props.startDate
     ? await balanceSeriesFrom(props.accountId, props.startDate)
     : await balanceSeries(props.accountId, props.days ?? 30);
-  // 每日 token 用量
-  const usageRows = props.startDate
-    ? await dailyUsageSeries(props.accountId, 3650)
-    : await dailyUsageSeries(props.accountId, props.days ?? 30);
+  // 每次调用的 token 事件（分钟级）
+  const tokRows = props.startDate
+    ? await usageEventsSeries(props.accountId, 3650)
+    : await usageEventsSeries(props.accountId, props.days ?? 30);
 
-  if (balRows.length === 0 && usageRows.length === 0) {
+  if (balRows.length === 0 && tokRows.length === 0) {
     chart.clear();
     chart.setOption({
       backgroundColor: "transparent",
@@ -39,10 +39,10 @@ async function render(): Promise<void> {
 
   // 余额折线：每个快照一个点（保留高时间分辨率）
   const balData = balRows.map((r) => [new Date(r.fetched_at).getTime(), r.balance]);
-  // token 柱形：按天（落在当天 00:00）
-  const tokData = usageRows.map((u) => [
-    new Date(u.date + "T00:00:00").getTime(),
-    u.tokens,
+  // token 线图：每次调用一个点（分钟级）
+  const tokData = tokRows.map((r) => [
+    new Date(r.created_at).getTime(),
+    r.input_tokens + r.output_tokens,
   ]);
 
   chart.setOption({
@@ -111,11 +111,13 @@ async function render(): Promise<void> {
       },
       {
         name: "Tokens",
-        type: "bar",
+        type: "line",
         yAxisIndex: 1,
         data: tokData,
-        barMaxWidth: 18,
-        itemStyle: { color: "rgba(96, 165, 250, 0.45)", borderRadius: [3, 3, 0, 0] },
+        smooth: false,
+        showSymbol: false,
+        lineStyle: { color: "#60a5fa", width: 1.5 },
+        itemStyle: { color: "#60a5fa" },
       },
     ],
   });

@@ -61,6 +61,16 @@ CREATE TABLE IF NOT EXISTS daily_usage (
   UNIQUE(account_id, date)
 );
 
+CREATE TABLE IF NOT EXISTS usage_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL,
+  model TEXT,
+  input_tokens INTEGER DEFAULT 0,
+  output_tokens INTEGER DEFAULT 0,
+  cost_estimated REAL DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
+
 CREATE TABLE IF NOT EXISTS price_table (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   provider_id TEXT NOT NULL,
@@ -216,6 +226,21 @@ export async function dailyUsageSeries(
      WHERE account_id = $1 AND date >= date('now', 'localtime', $2)
      GROUP BY date
      ORDER BY date ASC`,
+    [accountId, `-${days} days`]
+  );
+}
+
+/** 每次调用的 token 事件（分钟级，近 N 天） */
+export async function usageEventsSeries(
+  accountId: number,
+  days = 30
+): Promise<{ created_at: string; input_tokens: number; output_tokens: number }[]> {
+  const d = getDb();
+  return d.select<{ created_at: string; input_tokens: number; output_tokens: number }[]>(
+    `SELECT created_at, input_tokens, output_tokens
+     FROM usage_events
+     WHERE account_id = $1 AND created_at >= datetime('now', 'localtime', $2)
+     ORDER BY created_at ASC`,
     [accountId, `-${days} days`]
   );
 }

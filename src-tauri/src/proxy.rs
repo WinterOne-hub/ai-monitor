@@ -387,6 +387,19 @@ async fn record_usage_to_db(st: &ProxyState, provider: &str, api_key: &str, mode
     .execute(&pool)
     .await;
 
+    // 记录调用事件（保留分钟级时间粒度）
+    let _ = sqlx::query(
+        "INSERT INTO usage_events (account_id, model, input_tokens, output_tokens, cost_estimated)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+    )
+    .bind(account_id)
+    .bind(model)
+    .bind(u.input)
+    .bind(u.output)
+    .bind(cost_estimated)
+    .execute(&pool)
+    .await;
+
     pool.close().await;
 
     // 通知前端刷新用量显示
