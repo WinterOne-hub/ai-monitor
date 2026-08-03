@@ -132,6 +132,18 @@ async fn handle_catch(st: ProxyState, provider: String, rest: String, req: Reque
 
     let method = req.method().clone();
     let headers = req.headers().clone();
+    // 提取 API Key（用于账户匹配记账）
+    let api_key = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").trim().to_string())
+        .or_else(|| {
+            headers
+                .get("x-api-key")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.trim().to_string())
+        })
+        .unwrap_or_default();
     eprintln!("[proxy] {method} /{provider}/v1/{rest} -> {upstream}");
 
     // 读取 body（仅带 body 的方法）
@@ -176,7 +188,7 @@ async fn handle_catch(st: ProxyState, provider: String, rest: String, req: Reque
 
     // 仅 chat/completions 与 messages 的成功响应记账
     if status.is_success() && method == Method::POST && (rest == "chat/completions" || is_messages) {
-        record_usage(&st, &provider, &body_bytes, &bytes).await;
+        record_usage(&st, &provider, &api_key, &body_bytes, &bytes).await;
     }
 
     build_response(status, ct, bytes)
@@ -190,7 +202,7 @@ struct UsageInfo {
     cache_hit: i64,
 }
 
-async fn record_usage(st: &ProxyState, provider: &str, req_body: &[u8], resp_body: &[u8]) {
+async fn record_usage(st: &ProxyState, provider: &str, api_key: &str, req_body: &[u8], resp_body: &[u8]) {
     let is_stream = String::from_utf8_lossy(req_body).contains("\"stream\":true");
     let usage = if is_stream {
         parse_usage_from_sse(resp_body)
@@ -202,7 +214,7 @@ async fn record_usage(st: &ProxyState, provider: &str, req_body: &[u8], resp_bod
         let model = serde_json::from_slice::<Value>(req_body)
             .ok()
             .and_then(|v| v.get("model").and_then(|m| m.as_str()).map(|s| s.to_string()));
-        record_usage_to_db(st, provider, model.as_deref(), u).await;
+        record_usage_to_db(st, provider, api_key, model.as_deref(), u).await;
     }
 }
 
@@ -278,7 +290,7 @@ fn default_prices(provider: &str) -> (f64, f64, f64) {
     }
 }
 
-async fn record_usage_to_db(st: &ProxyState, provider: &str, model: Option<&str>, u: UsageInfo) {
+async fn record_usage_to_db(st: &ProxyState, provider: &str, api_key: &str, model: Option<&str>, u: UsageInfo) {
     let opts = SqliteConnectOptions::new()
         .filename(&st.db_path)
         .create_if_missing(false);
@@ -286,14 +298,38 @@ async fn record_usage_to_db(st: &ProxyState, provider: &str, model: Option<&str>
         return;
     };
 
-    // 读取记账账户（设置页选择）
-    let account_id: Option<i64> =
-        sqlx::query_scalar("SELECT value FROM settings WHERE key='proxy_account_id'")
-            .fetch_optional(&pool)
-            .await
-            .ok()
-            .flatten()
-            .and_then(|v: String| v.parse().ok());
+    // 1. 按「平台 + API Key」自动匹配账户（多账户分流）
+    let mut account_id: Option<i64> = None;
+    let acc_ids: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM accounts WHERE provider_id = ?1 AND enabled = 1",
+    )
+    .bind(provider)
+    .fetch_all(&pool)
+    .await
+    .unwrap_or_default();
+    if !api_key.is_empty() {
+        for acc_id in acc_ids {
+            if let Ok(entry) = keyring::Entry::new("ai-monitor", &acc_id.to_string()) {
+                if let Ok(stored) = entry.get_password() {
+                    if stored == api_key {
+                        account_id = Some(acc_id);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. 未匹配到 -> 使用默认记账账户
+    if account_id.is_none() {
+        account_id =
+            sqlx::query_scalar("SELECT value FROM settings WHERE key='proxy_account_id'")
+                .fetch_optional(&pool)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|v: String| v.parse().ok());
+    }
 
     let Some(account_id) = account_id else {
         pool.close().await;
