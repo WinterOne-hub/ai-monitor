@@ -54,6 +54,7 @@ pub fn run() {
             commands::toggle_window,
             commands::http_get_json,
             commands::http_post_json,
+            commands::http_get_text,
             commands::quit_app,
         ])
         .run(tauri::generate_context!())

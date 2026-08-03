@@ -11,6 +11,7 @@ import {
 import { getProvider } from "../providers";
 import { checkAlerts } from "./alert";
 import { getDb } from "./db";
+import { syncPricesIfNeeded } from "./platformSync";
 
 /**
  * 用余额差值同步每日真实消耗：
@@ -101,6 +102,8 @@ export async function collectAll(): Promise<{ ok: number; failed: number; errors
   await checkAlerts();
   await syncCostFromBalance();
   await emit(EVENT_BALANCE_UPDATED);
+  // 每日自动同步平台模型价格（硅基流动等，节流 24h）
+  await syncPricesIfNeeded().catch(() => {});
   return { ok, failed, errors };
 }
 

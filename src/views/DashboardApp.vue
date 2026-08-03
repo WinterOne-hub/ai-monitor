@@ -28,6 +28,7 @@ import {
 import { providers, getProvider } from "../providers";
 import BalanceChart from "../components/BalanceChart.vue";
 import { testWebhook as testWebhookFn } from "../core/alert";
+import { syncPricesIfNeeded } from "../core/platformSync";
 import type { WebhookChannel } from "../core/webhook";
 import {
   enable as enableAutostart,
@@ -350,6 +351,29 @@ async function addPrice(): Promise<void> {
   await loadPrices();
 }
 
+// 同步平台模型价格
+const syncingPrices = ref(false);
+
+async function syncPrices(): Promise<void> {
+  if (syncingPrices.value) return;
+  syncingPrices.value = true;
+  try {
+    const { synced, count } = await syncPricesIfNeeded(true);
+    if (count > 0) {
+      showToast(`已同步硅基流动 ${count} 个模型价格`);
+    } else if (!synced) {
+      showToast("同步失败或暂无更新");
+    } else {
+      showToast("价格无变化");
+    }
+    await loadPrices();
+  } catch (e) {
+    showToast(`同步失败：${(e as Error).message || String(e)}`);
+  } finally {
+    syncingPrices.value = false;
+  }
+}
+
 function hidePanel(): void {
   void invoke("hide_window", { label: "dashboard" });
 }
@@ -665,7 +689,13 @@ onUnmounted(() => {
             <input v-model="priceCache" class="input num" type="number" min="0" step="0.01" placeholder="缓存" />
             <button class="btn primary" @click="addPrice">添加/更新</button>
           </div>
-          <p class="hint">代理记账按此单价实时计算费用；未配置的模型使用平台默认价。</p>
+          <div class="form-row">
+            <button class="btn" :disabled="syncingPrices" @click="syncPrices">
+              {{ syncingPrices ? "同步中…" : "同步硅基流动全部价格" }}
+            </button>
+            <span class="hint-inline">自动抓取官网全部模型价格，每日更新</span>
+          </div>
+          <p class="hint">代理记账按此单价实时计算费用；硅基流动为聚合平台（一余额多模型），消耗按 token×单价 估算。</p>
         </div>
         <div class="panel">
           <h3>关于</h3>

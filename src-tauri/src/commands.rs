@@ -130,3 +130,20 @@ pub async fn http_post_json(
     }
     Ok(serde_json::from_str(&text).unwrap_or(serde_json::Value::Null))
 }
+
+/// 通过 Rust 侧发起 HTTP GET 请求并返回原始文本（用于抓取网页数据）
+#[tauri::command]
+pub async fn http_get_text(url: String) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+        .build()
+        .map_err(|e| format!("HTTP 客户端初始化失败: {e}"))?;
+    let resp = client.get(&url).send().await.map_err(|e| format!("请求失败: {e}"))?;
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| format!("读取响应失败: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}"));
+    }
+    Ok(body)
+}
