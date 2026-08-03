@@ -246,6 +246,7 @@ function fmtTok(n: number): string {
 const trendAccountId = ref<number | null>(null);
 const trendRange = ref<"1" | "7" | "30" | "custom">("30");
 const trendStartDate = ref("");
+const trendEndDate = ref("");
 const trendMinDate = "2010-01-01";
 
 function trendMaxDate(): string {
@@ -263,6 +264,10 @@ function trendStart(): string | undefined {
   return trendRange.value === "custom" ? trendStartDate.value : undefined;
 }
 
+function trendEnd(): string | undefined {
+  return trendRange.value === "custom" ? trendEndDate.value : undefined;
+}
+
 async function loadTrendAccount(): Promise<void> {
   const accs = await listAccounts();
   if (trendAccountId.value === null && accs.length > 0) {
@@ -274,6 +279,9 @@ async function loadTrendAccount(): Promise<void> {
     d.setDate(d.getDate() - 30);
     const pad = (n: number) => String(n).padStart(2, "0");
     trendStartDate.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+  if (!trendEndDate.value) {
+    trendEndDate.value = trendMaxDate();
   }
 }
 
@@ -492,11 +500,21 @@ onUnmounted(() => {
               :min="trendMinDate"
               :max="trendMaxDate()"
             />
+            <span v-if="trendRange === 'custom'">→</span>
+            <input
+              v-if="trendRange === 'custom'"
+              v-model="trendEndDate"
+              class="input"
+              type="date"
+              :min="trendMinDate"
+              :max="trendMaxDate()"
+            />
           </div>
           <BalanceChart
             :account-id="trendAccountId"
             :days="trendDays()"
             :start-date="trendStart()"
+            :end-date="trendEnd()"
           />
         </div>
 
@@ -535,7 +553,7 @@ onUnmounted(() => {
               <div class="acc-sub">
                 {{ getProvider(acc.provider_id)?.name ?? acc.provider_id }}
                 <template v-if="balances[acc.id]">
-                  · {{ t("dashboard.updateAt") }} {{ new Date(balances[acc.id].fetched_at).toLocaleString(isZh() ? "zh-CN" : "en-US") }}
+                  · {{ t("dashboard.updateAt") }} {{ new Date(balances[acc.id].fetched_at.replace(" ", "T")).toLocaleString(isZh() ? "zh-CN" : "en-US") }}
                 </template>
               </div>
             </div>

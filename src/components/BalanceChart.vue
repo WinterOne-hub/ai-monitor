@@ -8,11 +8,17 @@ const props = defineProps<{
   accountId: number | null;
   days?: number;
   startDate?: string;
+  endDate?: string;
 }>();
 
 const { t } = useI18n();
 const chartEl = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
+
+/** Safari/WKWebView 不解析 'YYYY-MM-DD HH:MM:SS'，需转 ISO */
+function parseLocal(s: string): number {
+  return new Date(s.replace(" ", "T")).getTime();
+}
 
 async function render(): Promise<void> {
   if (!chart || !props.accountId) return;
@@ -39,9 +45,9 @@ async function render(): Promise<void> {
     return;
   }
 
-  const balData = balRows.map((r) => [new Date(r.fetched_at).getTime(), r.balance]);
+  const balData = balRows.map((r) => [parseLocal(r.fetched_at), r.balance]);
   const tokData = tokRows.map((r) => [
-    new Date(r.created_at).getTime(),
+    parseLocal(r.created_at),
     r.input_tokens + r.output_tokens,
   ]);
 
@@ -50,7 +56,9 @@ async function render(): Promise<void> {
   const xMin = props.startDate
     ? new Date(props.startDate + "T00:00:00").getTime()
     : now - (props.days ?? 30) * 24 * 3600 * 1000;
-  const xMax = now;
+  const xMax = props.endDate
+    ? new Date(props.endDate + "T23:59:59").getTime()
+    : now;
 
   // 时间轴格式：按范围跨度统一（短范围显示时间，长范围显示日期）
   const spanMs = xMax - xMin;
