@@ -2,6 +2,7 @@ import { createApp } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import OverlayApp from "./views/OverlayApp.vue";
 import DashboardApp from "./views/DashboardApp.vue";
+import { i18n } from "./i18n";
 import "./styles.css";
 
 // 根据窗口 label 渲染不同视图：
@@ -10,4 +11,4 @@ import "./styles.css";
 const label = getCurrentWindow().label;
 const rootComponent = label === "overlay" ? OverlayApp : DashboardApp;
 
-createApp(rootComponent).mount("#app");
+createApp(rootComponent).use(i18n).mount("#app");

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useI18n } from "vue-i18n";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
@@ -30,6 +31,7 @@ import { providers, getProvider } from "../providers";
 import BalanceChart from "../components/BalanceChart.vue";
 import { testWebhook as testWebhookFn } from "../core/alert";
 import { syncPricesIfNeeded } from "../core/platformSync";
+import { i18n } from "../i18n";
 import type { WebhookChannel } from "../core/webhook";
 import {
   enable as enableAutostart,
@@ -38,6 +40,9 @@ import {
 } from "@tauri-apps/plugin-autostart";
 
 type Tab = "accounts" | "usage" | "settings";
+
+const { t } = useI18n();
+const isZh = () => i18n.global.locale.value === "zh";
 
 const tab = ref<Tab>("accounts");
 const accounts = ref<AccountRow[]>([]);
@@ -115,7 +120,7 @@ async function addAccount(): Promise<void> {
   const name = formName.value.trim() || provider?.name || providerId;
   const key = formKey.value.trim();
   if (!key) {
-    showToast("请填写 API Key");
+    showToast(t("dashboard.toast.apiKeyRequired"));
     return;
   }
   adding.value = true;
@@ -135,10 +140,10 @@ async function addAccount(): Promise<void> {
     }
     formKey.value = "";
     formName.value = "";
-    showToast(`已添加账户「${name}」`);
+    showToast(t("dashboard.toast.addOk", { name }));
     await loadData();
   } catch (e) {
-    showToast(`添加失败：${(e as Error).message || String(e)}`);
+    showToast(t("dashboard.toast.addFail", { err: (e as Error).message || String(e) }));
   } finally {
     adding.value = false;
   }
@@ -146,16 +151,16 @@ async function addAccount(): Promise<void> {
 
 async function removeAccount(acc: AccountRow): Promise<void> {
   await deleteAccountAndSecret(acc.id);
-  showToast(`已删除「${acc.name}」及其密钥`);
+  showToast(t("dashboard.toast.delOk", { name: acc.name }));
   await loadData();
 }
 
 async function refreshOne(acc: AccountRow): Promise<void> {
   try {
     await collectAccount(acc);
-    showToast(`「${acc.name}」已刷新`);
+    showToast(t("dashboard.toast.refreshOneOk", { name: acc.name }));
   } catch (e) {
-    showToast(`刷新失败：${(e as Error).message}`);
+    showToast(t("dashboard.toast.refreshOneFail", { err: (e as Error).message }));
   }
   await loadData();
 }
@@ -166,12 +171,12 @@ async function refreshAll(): Promise<void> {
   try {
     const result = await collectAll();
     if (result.failed > 0) {
-      showToast(`刷新失败 ${result.failed} 个：\n${result.errors.slice(0, 3).join("\n")}`);
+      showToast(t("dashboard.toast.refreshFail", { failed: result.failed, errors: result.errors.slice(0, 3).join("\n") }));
     } else {
-      showToast(`刷新完成：成功 ${result.ok} 个`);
+      showToast(t("dashboard.toast.refreshDone", { ok: result.ok }));
     }
   } catch (e) {
-    showToast(`刷新失败：${(e as Error).message || String(e)}`);
+    showToast(t("dashboard.toast.refreshErr", { err: (e as Error).message || String(e) }));
   }
   collecting.value = false;
   await loadData();
@@ -180,17 +185,17 @@ async function refreshAll(): Promise<void> {
 async function saveInterval(): Promise<void> {
   const m = await setCollectIntervalMinutes(parseInt(String(intervalMinutes.value), 10) || 30);
   intervalMinutes.value = m;
-  showToast(`采集间隔已设为 ${m} 分钟`);
+  showToast(t("dashboard.toast.saveInterval", { m }));
 }
 
 async function saveThreshold(): Promise<void> {
   const v = parseInt(lowThreshold.value, 10);
   if (Number.isNaN(v) || v < 0) {
-    showToast("请输入有效数值");
+    showToast(t("dashboard.toast.invalidNumber"));
     return;
   }
   await setSetting("low_balance_threshold", String(v));
-  showToast(`低余额提醒阈值已设为 ¥${v}`);
+  showToast(t("dashboard.toast.saveThreshold", { v }));
 }
 
 // 手动登记余额
@@ -214,14 +219,14 @@ async function saveManualBalance(): Promise<void> {
   if (!modalAccount.value) return;
   const v = parseFloat(modalBalance.value);
   if (Number.isNaN(v) || v < 0) {
-    showToast("请输入有效余额");
+    showToast(t("dashboard.toast.balanceInvalid"));
     return;
   }
   await saveBalanceSnapshot(modalAccount.value.id, {
     balance: v,
     currency: modalCurrency.value,
   });
-  showToast("余额已登记");
+  showToast(t("dashboard.toast.balanceRegistered"));
   closeBalanceModal();
   await loadData();
 }
@@ -271,27 +276,27 @@ const alertChannel = ref<WebhookChannel>("serverchan");
 const alertWebhookUrl = ref("");
 
 async function saveAlert(): Promise<void> {
-  const t = parseFloat(alertThreshold.value);
-  if (Number.isNaN(t) || t < 0) {
-    showToast("请输入有效阈值");
+  const threshold = parseFloat(alertThreshold.value);
+  if (Number.isNaN(threshold) || threshold < 0) {
+    showToast(t("dashboard.toast.addPriceInvalid"));
     return;
   }
-  await setSetting("alert_balance_threshold", String(t));
+  await setSetting("alert_balance_threshold", String(threshold));
   await setSetting("alert_webhook_channel", alertChannel.value);
   await setSetting("alert_webhook_url", alertWebhookUrl.value.trim());
-  showToast("告警设置已保存");
+  showToast(t("dashboard.toast.alertSaved"));
 }
 
 async function testWebhookSend(): Promise<void> {
   if (!alertWebhookUrl.value.trim()) {
-    showToast("请先填写 Webhook URL");
+    showToast(t("dashboard.toast.webhookEmpty"));
     return;
   }
   try {
     await testWebhookFn(alertChannel.value, alertWebhookUrl.value.trim());
-    showToast("测试消息已发送，请查看手机/群聊");
+    showToast(t("dashboard.toast.webhookSent"));
   } catch (e) {
-    showToast(`发送失败：${(e as Error).message || String(e)}`);
+    showToast(t("dashboard.toast.webhookFail", { err: (e as Error).message || String(e) }));
   }
 }
 
@@ -301,14 +306,14 @@ async function toggleAutostart(): Promise<void> {
   try {
     if (autostartOn.value) {
       await enableAutostart();
-      showToast("已开启开机自启");
+      showToast(t("dashboard.toast.autostartOn"));
     } else {
       await disableAutostart();
-      showToast("已关闭开机自启");
+      showToast(t("dashboard.toast.autostartOff"));
     }
   } catch (e) {
     autostartOn.value = !autostartOn.value;
-    showToast(`操作失败：${(e as Error).message || String(e)}`);
+    showToast(t("dashboard.toast.autostartFail", { err: (e as Error).message || String(e) }));
   }
 }
 
@@ -318,11 +323,11 @@ const PROXY_ADDR = "http://127.0.0.1:8899/v1";
 
 async function saveProxy(): Promise<void> {
   if (!proxyAccountId.value) {
-    showToast("请选择记账账户");
+    showToast(t("dashboard.toast.proxyAccountRequired"));
     return;
   }
   await setSetting("proxy_account_id", String(proxyAccountId.value));
-  showToast("代理设置已保存，token 将自动记录到该账户");
+  showToast(t("dashboard.toast.saveProxyOk"));
 }
 
 // 模型单价管理
@@ -340,14 +345,14 @@ async function loadPrices(): Promise<void> {
 async function addPrice(): Promise<void> {
   const model = priceModel.value.trim();
   if (!model) {
-    showToast("请填写模型名");
+    showToast(t("dashboard.toast.addPriceNoModel"));
     return;
   }
   const input = parseFloat(priceInput.value);
   const output = parseFloat(priceOutput.value);
   const cache = parseFloat(priceCache.value);
   if ([input, output, cache].some((v) => Number.isNaN(v) || v < 0)) {
-    showToast("请输入有效单价（元/百万 tokens）");
+    showToast(t("dashboard.toast.addPriceInvalid"));
     return;
   }
   await upsertPrice({
@@ -357,7 +362,7 @@ async function addPrice(): Promise<void> {
     outputPrice: output,
     cacheHitPrice: cache,
   });
-  showToast(`已保存 ${model} 单价`);
+  showToast(t("dashboard.toast.priceOk", { model }));
   priceModel.value = "";
   await loadPrices();
 }
@@ -371,15 +376,15 @@ async function syncPrices(): Promise<void> {
   try {
     const { synced, count } = await syncPricesIfNeeded(true);
     if (count > 0) {
-      showToast(`已同步硅基流动 ${count} 个模型价格`);
+      showToast(t("dashboard.toast.priceSyncOk", { count }));
     } else if (!synced) {
-      showToast("同步失败或暂无更新");
+      showToast(t("dashboard.toast.priceSyncFail", { err: "" }));
     } else {
-      showToast("价格无变化");
+      showToast(t("dashboard.toast.priceSyncNone"));
     }
     await loadPrices();
   } catch (e) {
-    showToast(`同步失败：${(e as Error).message || String(e)}`);
+    showToast(t("dashboard.toast.priceSyncFail", { err: (e as Error).message || String(e) }));
   } finally {
     syncingPrices.value = false;
   }
@@ -416,25 +421,25 @@ onUnmounted(() => {
     <header class="topbar">
       <div class="brand">
         <span class="brand-dot"></span>
-        <span>AI 用量监控</span>
+        <span>{{ t("dashboard.title") }}</span>
       </div>
       <div class="topbar-right">
         <button class="btn" :disabled="collecting" @click="refreshAll">
-          {{ collecting ? "采集中…" : "全部刷新" }}
+          {{ collecting ? t("dashboard.adding") : t("dashboard.refreshAll") }}
         </button>
-        <button class="btn ghost" @click="hidePanel">隐藏到托盘</button>
+        <button class="btn ghost" @click="hidePanel">{{ t("dashboard.hideToTray") }}</button>
       </div>
     </header>
 
     <nav class="tabs">
       <button
-        v-for="t in (['accounts', 'usage', 'settings'] as Tab[])"
-        :key="t"
+        v-for="tt in (['accounts', 'usage', 'settings'] as Tab[])"
+        :key="tt"
         class="tab"
-        :class="{ active: tab === t }"
-        @click="tab = t"
+        :class="{ active: tab === tt }"
+        @click="tab = tt"
       >
-        {{ { accounts: "账户", usage: "用量分析", settings: "设置" }[t] }}
+        {{ t(`dashboard.tabs.${tt}`) }}
       </button>
     </nav>
 
@@ -443,21 +448,21 @@ onUnmounted(() => {
       <section v-if="tab === 'accounts'">
         <div class="stat-row">
           <div class="stat-card">
-            <div class="stat-label">账户总数</div>
+            <div class="stat-label">{{ t("dashboard.statTotal") }}</div>
             <div class="stat-value">{{ accounts.length }}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">总余额</div>
+            <div class="stat-label">{{ t("dashboard.statBalance") }}</div>
             <div class="stat-value">{{ fmt(totalBalance) }} <span class="unit">¥</span></div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">今日消耗</div>
+            <div class="stat-label">{{ t("dashboard.statToday") }}</div>
             <div class="stat-value">{{ fmt(displayCost(today.cost, today.cost_estimated)) }} <span class="unit">¥</span></div>
           </div>
         </div>
 
         <div class="panel">
-          <h3>余额趋势</h3>
+          <h3>{{ t("dashboard.trend") }}</h3>
           <div class="form-row">
             <select v-model="trendAccountId" class="input select">
               <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
@@ -465,10 +470,10 @@ onUnmounted(() => {
               </option>
             </select>
             <select v-model="trendRange" class="input select">
-              <option value="1">近 1 日</option>
-              <option value="7">近 7 日</option>
-              <option value="30">近 30 日</option>
-              <option value="custom">自定义</option>
+              <option value="1">{{ t("dashboard.trendRange.1") }}</option>
+              <option value="7">{{ t("dashboard.trendRange.7") }}</option>
+              <option value="30">{{ t("dashboard.trendRange.30") }}</option>
+              <option value="custom">{{ t("dashboard.trendRange.custom") }}</option>
             </select>
             <input
               v-if="trendRange === 'custom'"
@@ -485,33 +490,33 @@ onUnmounted(() => {
         </div>
 
         <div class="panel">
-          <h3>添加账户</h3>
+          <h3>{{ t("dashboard.addAccount") }}</h3>
           <div class="form-row">
             <select v-model="formProvider" class="input select">
               <option v-for="p in providers" :key="p.id" :value="p.id">
-                {{ p.name }}{{ p.balanceSupported ? "" : "（手动登记）" }}
+                {{ p.name }}{{ p.balanceSupported ? "" : "（" + t("dashboard.registerBalance") + "）" }}
               </option>
             </select>
-            <input v-model="formName" class="input" placeholder="备注名（默认平台名）" />
+            <input v-model="formName" class="input" :placeholder="t('dashboard.accountName')" />
             <input
               v-model="formKey"
               class="input key"
               type="password"
-              placeholder="API Key（加密存入系统钥匙串）"
+              :placeholder="t('dashboard.apiKey')"
             />
             <button class="btn primary" :disabled="adding" @click="addAccount">
-              {{ adding ? "添加中…" : "添加" }}
+              {{ adding ? t("dashboard.adding") : t("dashboard.add") }}
             </button>
           </div>
           <p v-if="!getProvider(formProvider)?.balanceSupported" class="hint">
-            该平台暂不支持自动查询余额，添加后可手动登记余额。
+            {{ t("dashboard.manualHint") }}
           </p>
         </div>
 
         <div class="panel">
-          <h3>账户列表</h3>
+          <h3>{{ t("dashboard.accountList") }}</h3>
           <div v-if="accounts.length === 0" class="empty-tip">
-            还没有账户，添加第一个吧（DeepSeek 开箱即用）
+            {{ t("dashboard.noAccounts") }}
           </div>
           <div v-for="acc in accounts" :key="acc.id" class="acc-card">
             <div class="acc-info">
@@ -519,7 +524,7 @@ onUnmounted(() => {
               <div class="acc-sub">
                 {{ getProvider(acc.provider_id)?.name ?? acc.provider_id }}
                 <template v-if="balances[acc.id]">
-                  · 更新于 {{ new Date(balances[acc.id].fetched_at).toLocaleString("zh-CN") }}
+                  · {{ t("dashboard.updateAt") }} {{ new Date(balances[acc.id].fetched_at).toLocaleString(isZh() ? "zh-CN" : "en-US") }}
                 </template>
               </div>
             </div>
@@ -528,15 +533,15 @@ onUnmounted(() => {
               <div class="bal-cur">{{ balances[acc.id]?.currency ?? "" }}</div>
             </div>
             <div class="acc-actions">
-              <button class="btn small" @click="refreshOne(acc)">刷新</button>
+              <button class="btn small" @click="refreshOne(acc)">{{ t("dashboard.refresh") }}</button>
               <button
                 v-if="!getProvider(acc.provider_id)?.balanceSupported"
                 class="btn small"
                 @click="openBalanceModal(acc)"
               >
-                登记余额
+                {{ t("dashboard.registerBalance") }}
               </button>
-              <button class="btn small danger" @click="removeAccount(acc)">删除</button>
+              <button class="btn small danger" @click="removeAccount(acc)">{{ t("dashboard.delete") }}</button>
             </div>
           </div>
         </div>
@@ -545,36 +550,36 @@ onUnmounted(() => {
       <!-- 用量 -->
       <section v-else-if="tab === 'usage'">
         <div class="panel">
-          <h3>今日用量</h3>
+          <h3>{{ t("dashboard.todayUsage") }}</h3>
           <div class="usage-grid">
             <div class="usage-item">
-              <div class="usage-label">输入 Tokens</div>
+              <div class="usage-label">{{ t("dashboard.inputTokens") }}</div>
               <div class="usage-value">{{ fmtTok(today.input_tokens) }}</div>
             </div>
             <div class="usage-item">
-              <div class="usage-label">输出 Tokens</div>
+              <div class="usage-label">{{ t("dashboard.outputTokens") }}</div>
               <div class="usage-value">{{ fmtTok(today.output_tokens) }}</div>
             </div>
             <div class="usage-item">
-              <div class="usage-label">估算费用</div>
+              <div class="usage-label">{{ t("dashboard.estimatedCost") }}</div>
               <div class="usage-value">¥{{ fmt(displayCost(today.cost, today.cost_estimated)) }}</div>
             </div>
           </div>
-          <p class="hint">token 数据由统一代理自动记录；把调用地址指向 127.0.0.1:8899 即可。</p>
+          <p class="hint">{{ t("dashboard.usageAuto") }}</p>
         </div>
 
         <div class="panel">
-          <h3>最近 7 天记录</h3>
-          <div v-if="recentUsage.length === 0" class="empty-tip">暂无用量记录</div>
+          <h3>{{ t("dashboard.recent7") }}</h3>
+          <div v-if="recentUsage.length === 0" class="empty-tip">{{ t("dashboard.noUsage") }}</div>
           <table v-else class="usage-table">
             <thead>
               <tr>
-                <th>日期</th>
-                <th>账户</th>
-                <th>输入</th>
-                <th>输出</th>
-                <th>费用</th>
-                <th>来源</th>
+                <th>{{ t("dashboard.date") }}</th>
+                <th>{{ t("dashboard.account") }}</th>
+                <th>{{ t("dashboard.input") }}</th>
+                <th>{{ t("dashboard.output") }}</th>
+                <th>{{ t("dashboard.cost") }}</th>
+                <th>{{ t("dashboard.source") }}</th>
               </tr>
             </thead>
             <tbody>
@@ -584,7 +589,7 @@ onUnmounted(() => {
                 <td>{{ fmtTok(u.input_tokens) }}</td>
                 <td>{{ fmtTok(u.output_tokens) }}</td>
                 <td>¥{{ fmt(u.cost) }}</td>
-                <td>{{ u.source === "manual" ? "手动" : u.source }}</td>
+                <td>{{ u.source === "manual" ? t("dashboard.manual") : t("dashboard.proxy") }}</td>
               </tr>
             </tbody>
           </table>
@@ -594,90 +599,92 @@ onUnmounted(() => {
       <!-- 设置 -->
       <section v-else>
         <div class="panel">
-          <h3>采集设置</h3>
+          <h3>{{ t("dashboard.settings.collectInterval") }}</h3>
           <div class="form-row">
-            <label class="form-label">自动采集间隔（分钟）</label>
+            <label class="form-label">{{ t("dashboard.settings.collectInterval") }}</label>
             <input v-model.number="intervalMinutes" class="input num" type="number" min="1" max="1440" />
-            <button class="btn" @click="saveInterval">保存</button>
+            <button class="btn" @click="saveInterval">{{ t("dashboard.settings.save") }}</button>
           </div>
           <div class="form-row">
-            <label class="form-label">低余额提醒阈值（¥）</label>
+            <label class="form-label">{{ t("dashboard.settings.lowBalanceThreshold") }}</label>
             <input v-model="lowThreshold" class="input num" type="number" min="0" />
-            <button class="btn" @click="saveThreshold">保存</button>
+            <button class="btn" @click="saveThreshold">{{ t("dashboard.settings.save") }}</button>
           </div>
         </div>
+
         <div class="panel">
-          <h3>余额告警</h3>
+          <h3>{{ t("dashboard.settings.alertTitle") }}</h3>
           <div class="form-row">
-            <label class="form-label">余额低于（¥）触发通知</label>
+            <label class="form-label">{{ t("dashboard.settings.alertThreshold") }}</label>
             <input v-model="alertThreshold" class="input num" type="number" min="0" />
           </div>
           <div class="form-row">
-            <label class="form-label">Webhook 渠道</label>
+            <label class="form-label">{{ t("dashboard.settings.webhookChannel") }}</label>
             <select v-model="alertChannel" class="input select">
-              <option value="serverchan">Server酱</option>
-              <option value="feishu">飞书机器人</option>
-              <option value="dingtalk">钉钉机器人</option>
-              <option value="bark">Bark (iOS)</option>
+              <option value="serverchan">ServerChan</option>
+              <option value="feishu">Feishu</option>
+              <option value="dingtalk">DingTalk</option>
+              <option value="bark">Bark</option>
             </select>
           </div>
           <div class="form-row">
-            <input v-model="alertWebhookUrl" class="input key" placeholder="Webhook URL（留空则仅系统通知）" />
-            <button class="btn" @click="testWebhookSend">发送测试</button>
+            <input v-model="alertWebhookUrl" class="input key" :placeholder="t('dashboard.settings.webhookUrl')" />
+            <button class="btn" @click="testWebhookSend">{{ t("dashboard.settings.sendTest") }}</button>
           </div>
           <div class="form-row">
-            <button class="btn primary" @click="saveAlert">保存告警设置</button>
-            <span class="hint-inline">系统通知始终开启；冷却 6 小时避免刷屏</span>
+            <button class="btn primary" @click="saveAlert">{{ t("dashboard.settings.saveAlert") }}</button>
+            <span class="hint-inline">{{ t("dashboard.settings.alertHint") }}</span>
           </div>
         </div>
+
         <div class="panel">
-          <h3>常规</h3>
+          <h3>{{ t("dashboard.settings.autostart") }}</h3>
           <div class="form-row">
-            <label class="form-label">开机自动启动</label>
+            <label class="form-label">{{ t("dashboard.settings.autostart") }}</label>
             <label class="switch">
               <input type="checkbox" v-model="autostartOn" @change="toggleAutostart" />
               <span class="slider"></span>
             </label>
           </div>
         </div>
+
         <div class="panel">
-          <h3>统一代理（自动统计 Token）</h3>
-          <p class="hint">
-            代理服务已在本机运行。把<b>调用 AI 的程序</b>（代码 / SDK / 工具）的地址改为下面任意一个，每次调用自动记录 token。
-          </p>
+          <h3>{{ t("dashboard.settings.proxy") }}</h3>
+          <p class="hint">{{ t("dashboard.settings.proxyHint") }}</p>
           <div class="code-block">
             {{ PROXY_ADDR }}<span class="code-note">（DeepSeek）</span><br />
             http://127.0.0.1:8899/moonshot/v1<span class="code-note">（Kimi）</span><br />
-            http://127.0.0.1:8899/siliconflow/v1<span class="code-note">（硅基流动）</span>
+            http://127.0.0.1:8899/siliconflow/v1<span class="code-note">（SiliconFlow）</span>
           </div>
-          <p class="hint">接入示例（Python）：</p>
+          <p class="hint">Python:</p>
           <div class="code-block">
             from openai import OpenAI<br />
             client = OpenAI(<br />
-            &nbsp;&nbsp;api_key="你的真实key",<br />
+            &nbsp;&nbsp;api_key="sk-your-key",<br />
             &nbsp;&nbsp;base_url="http://127.0.0.1:8899/v1",<br />
             )
           </div>
           <div class="form-row">
-            <label class="form-label">Token 记入账户</label>
+            <label class="form-label">{{ t("dashboard.settings.proxyAccount") }}</label>
             <select v-model="proxyAccountId" class="input select">
               <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
                 {{ acc.name }}
               </option>
             </select>
-            <button class="btn primary" @click="saveProxy">保存</button>
+            <button class="btn primary" @click="saveProxy">{{ t("dashboard.settings.saveProxy") }}</button>
           </div>
         </div>
+
         <div class="panel">
-          <h3>模型单价（元/百万 tokens，用于金额统计）</h3>
+          <h3>{{ t("dashboard.settings.priceTitle") }}</h3>
           <table class="usage-table">
             <thead>
               <tr>
-                <th>平台</th>
-                <th>模型</th>
-                <th>输入</th>
-                <th>输出</th>
-                <th>缓存命中</th>
+                <th>Platform</th>
+                <th>Model</th>
+                <th>Input</th>
+                <th>Output</th>
+                <th>Cache</th>
               </tr>
             </thead>
             <tbody>
@@ -694,26 +701,24 @@ onUnmounted(() => {
             <select v-model="priceProvider" class="input select">
               <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
             </select>
-            <input v-model="priceModel" class="input" placeholder="模型名，如 deepseek-chat" />
-            <input v-model="priceInput" class="input num" type="number" min="0" step="0.01" placeholder="输入" />
-            <input v-model="priceOutput" class="input num" type="number" min="0" step="0.01" placeholder="输出" />
-            <input v-model="priceCache" class="input num" type="number" min="0" step="0.01" placeholder="缓存" />
-            <button class="btn primary" @click="addPrice">添加/更新</button>
+            <input v-model="priceModel" class="input" :placeholder="t('dashboard.settings.modelName')" />
+            <input v-model="priceInput" class="input num" type="number" min="0" step="0.01" :placeholder="t('dashboard.settings.input')" />
+            <input v-model="priceOutput" class="input num" type="number" min="0" step="0.01" :placeholder="t('dashboard.settings.output')" />
+            <input v-model="priceCache" class="input num" type="number" min="0" step="0.01" :placeholder="t('dashboard.settings.cache')" />
+            <button class="btn primary" @click="addPrice">{{ t("dashboard.settings.addUpdate") }}</button>
           </div>
           <div class="form-row">
             <button class="btn" :disabled="syncingPrices" @click="syncPrices">
-              {{ syncingPrices ? "同步中…" : "同步硅基流动全部价格" }}
+              {{ syncingPrices ? t("dashboard.adding") : t("dashboard.settings.priceSync") }}
             </button>
-            <span class="hint-inline">自动抓取官网全部模型价格，每日更新</span>
+            <span class="hint-inline">{{ t("dashboard.settings.priceSyncHint") }}</span>
           </div>
-          <p class="hint">代理记账按此单价实时计算费用；硅基流动为聚合平台（一余额多模型），消耗按 token×单价 估算。</p>
+          <p class="hint">{{ t("dashboard.settings.priceHint") }}</p>
         </div>
+
         <div class="panel">
-          <h3>关于</h3>
-          <p class="hint">
-            AI 用量监控 v0.1.0 · 本地应用，数据仅存储在本机。<br />
-            API Key 加密保存在系统钥匙串（macOS Keychain / Windows DPAPI）。
-          </p>
+          <h3>{{ t("dashboard.settings.about") }}</h3>
+          <p class="hint" style="white-space: pre-line">{{ t("dashboard.settings.aboutText") }}</p>
         </div>
       </section>
     </main>
@@ -723,7 +728,7 @@ onUnmounted(() => {
     <!-- 手动登记余额 -->
     <div v-if="showBalanceModal" class="modal-mask" @click.self="closeBalanceModal">
       <div class="modal">
-        <h3>登记余额</h3>
+        <h3>{{ t("dashboard.registerBalance") }}</h3>
         <p class="hint">
           {{ modalAccount?.name }} · {{ getProvider(modalAccount?.provider_id ?? "")?.name }}
         </p>
@@ -734,7 +739,7 @@ onUnmounted(() => {
             type="number"
             step="0.01"
             min="0"
-            placeholder="余额"
+            :placeholder="t('dashboard.registerBalance')"
           />
           <select v-model="modalCurrency" class="input select">
             <option value="CNY">CNY</option>
@@ -742,8 +747,8 @@ onUnmounted(() => {
           </select>
         </div>
         <div class="modal-actions">
-          <button class="btn" @click="closeBalanceModal">取消</button>
-          <button class="btn primary" @click="saveManualBalance">保存</button>
+          <button class="btn" @click="closeBalanceModal">{{ t("dashboard.cancel") }}</button>
+          <button class="btn primary" @click="saveManualBalance">{{ t("dashboard.settings.save") }}</button>
         </div>
       </div>
     </div>

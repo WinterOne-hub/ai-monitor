@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow, currentMonitor } from "@tauri-apps/api/window";
@@ -16,8 +17,11 @@ import {
   type AccountRow,
 } from "../core/db";
 import { collectAll, startAutoCollect, EVENT_BALANCE_UPDATED } from "../core/collector";
+import { i18n } from "../i18n";
 
 const win = getCurrentWindow();
+const { t } = useI18n();
+const isZh = () => i18n.global.locale.value === "zh";
 
 // 灵动岛三态尺寸（逻辑像素）
 const CAPSULE_W = 320;
@@ -77,7 +81,8 @@ function compactTok(n: number): string {
 
 function todayLabel(): string {
   const d = new Date();
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
+  const loc = isZh() ? "zh-CN" : "en-US";
+  return d.toLocaleDateString(loc, { month: "long", day: "numeric" });
 }
 
 function statusColor(balance: number): string {
@@ -414,7 +419,7 @@ onUnmounted(() => {
     @mouseenter="onHoverEnter"
     @mouseleave="onHoverLeave"
     @click="onEdgeClick"
-    title="点击推出"
+    :title="t('overlay.expandHint')"
   >
     <span class="dot" :class="{ online: !collecting }"></span>
     <span class="c-title">AI</span>
@@ -430,16 +435,16 @@ onUnmounted(() => {
     <!-- 顶部行（胶囊内容 / 展开 header） -->
     <div class="cap-row" data-tauri-drag-region @click="onCapsuleClick">
       <span class="dot" :class="{ online: !collecting }"></span>
-      <span class="brand">AI 用量</span>
+      <span class="brand">{{ t("overlay.brand") }}</span>
       <span class="divider"></span>
       <span class="bal" :style="{ color: statusColor(totalBalance) }">¥{{ fmt(totalBalance) }}</span>
       <span class="spend">-¥{{ fmt(displayCost(today.cost, today.cost_estimated)) }}</span>
       <span class="tok">{{ compactTok(today.input_tokens + today.output_tokens) }} tok</span>
       <span v-if="mode === 'capsule'" class="chevron">›</span>
       <div v-else class="head-actions">
-        <button class="icon-btn" title="刷新" :disabled="collecting" @click.stop="refresh">⟳</button>
-        <button class="icon-btn" title="打开面板" @click.stop="openDashboard">⤢</button>
-        <button class="icon-btn" title="隐藏到托盘" @click.stop="hideOverlay">—</button>
+        <button class="icon-btn" :title="t('overlay.refresh')" :disabled="collecting" @click.stop="refresh">⟳</button>
+        <button class="icon-btn" :title="t('overlay.panel')" @click.stop="openDashboard">⤢</button>
+        <button class="icon-btn" :title="t('overlay.hide')" @click.stop="hideOverlay">—</button>
       </div>
     </div>
 
@@ -447,8 +452,8 @@ onUnmounted(() => {
     <div class="drawer">
       <div class="drawer-body">
         <div v-if="accounts.length === 0" class="empty" @click="openDashboard">
-          尚未添加账户<br />
-          <span>点击这里打开面板添加</span>
+          {{ t("overlay.empty") }}<br />
+          <span>{{ t("overlay.emptyHint") }}</span>
         </div>
         <div v-for="acc in accounts" v-else :key="acc.id" class="acc-row">
           <div class="acc-name">{{ acc.name }}</div>
@@ -466,11 +471,9 @@ onUnmounted(() => {
       </div>
       <div class="drawer-footer">
         <span class="date">{{ todayLabel() }}</span>
-        <span class="tokens">
-          今日 {{ compactTok(today.input_tokens) }}/{{ compactTok(today.output_tokens) }} tok
-        </span>
+        <span class="tokens">{{ t("overlay.today", { in: compactTok(today.input_tokens), out: compactTok(today.output_tokens) }) }}</span>
         <span class="cost">¥{{ fmt(displayCost(today.cost, today.cost_estimated)) }}</span>
-        <span class="time">{{ lastUpdated ? "更新 " + lastUpdated : "" }}</span>
+        <span class="time">{{ lastUpdated ? t("overlay.update", { time: lastUpdated }) : "" }}</span>
       </div>
     </div>
   </div>
