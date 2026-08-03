@@ -10,6 +10,51 @@ import {
 } from "./db";
 import { getProvider } from "../providers";
 import { checkAlerts } from "./alert";
+import { getDb } from "./db";
+
+/**
+ * 用余额差值同步每日真实消耗：
+ * 每天首条余额快照 - 当天最后一条 = 当天实际扣费（充值会使差值失真，忽略负值）
+ * 结果写入 daily_usage.cost（权威值）；token×单价估算在 cost_estimated（备用）
+ */
+export async function syncCostFromBalance(): Promise<void> {
+  try {
+    const d = getDb();
+    // 每天每条余额快照（含日期）
+    const rows = await d.select<{ account_id: number; balance: number; fetched_at: string; day: string }[]>(
+      `SELECT account_id, balance, fetched_at, substr(fetched_at, 1, 10) AS day
+       FROM balance_snapshots
+       ORDER BY account_id, fetched_at ASC`
+    );
+    // 按账户+天分组，取首末
+    const byAcc: Record<number, { day: string; first: number; last: number }[]> = {};
+    for (const r of rows) {
+      const arr = (byAcc[r.account_id] ??= []);
+      const found = arr.find((x) => x.day === r.day);
+      if (found) {
+        found.last = r.balance;
+      } else {
+        arr.push({ day: r.day, first: r.balance, last: r.balance });
+      }
+    }
+    for (const [accIdStr, days] of Object.entries(byAcc)) {
+      const accId = Number(accIdStr);
+      for (const dayInfo of days) {
+        const diff = dayInfo.first - dayInfo.last; // 正 = 消耗
+        if (diff > 0.0001) {
+          await d.execute(
+            `INSERT INTO daily_usage (account_id, date, cost, source)
+             VALUES ($1, $2, $3, 'balance')
+             ON CONFLICT(account_id, date) DO UPDATE SET cost = excluded.cost, source = 'balance'`,
+            [accId, dayInfo.day, diff]
+          );
+        }
+      }
+    }
+  } catch (e) {
+    console.error("余额差值计费同步失败", e);
+  }
+}
 
 export const EVENT_BALANCE_UPDATED = "balance-updated";
 export const EVENT_COLLECT_START = "collect-start";
@@ -54,6 +99,8 @@ export async function collectAll(): Promise<{ ok: number; failed: number; errors
   await emit(EVENT_COLLECT_END, { ok, failed, errors });
   await emit(EVENT_BALANCE_UPDATED);
   await checkAlerts();
+  await syncCostFromBalance();
+  await emit(EVENT_BALANCE_UPDATED);
   return { ok, failed, errors };
 }
 
