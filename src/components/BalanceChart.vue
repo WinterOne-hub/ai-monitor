@@ -37,19 +37,13 @@ async function render(): Promise<void> {
     return;
   }
 
-  // 按天合并：余额取当天最后一条，token 累加
-  const dayMap: Record<string, { balance: number | null; tokens: number }> = {};
-  for (const r of balRows) {
-    const day = r.fetched_at.slice(0, 10);
-    dayMap[day] = { balance: r.balance, tokens: dayMap[day]?.tokens ?? 0 };
-  }
-  for (const u of usageRows) {
-    if (!dayMap[u.date]) dayMap[u.date] = { balance: null, tokens: 0 };
-    dayMap[u.date].tokens += u.tokens;
-  }
-  const dates = Object.keys(dayMap).sort();
-  const balances = dates.map((d) => dayMap[d].balance);
-  const tokens = dates.map((d) => dayMap[d].tokens);
+  // 余额折线：每个快照一个点（保留高时间分辨率）
+  const balData = balRows.map((r) => [new Date(r.fetched_at).getTime(), r.balance]);
+  // token 柱形：按天（落在当天 00:00）
+  const tokData = usageRows.map((u) => [
+    new Date(u.date + "T00:00:00").getTime(),
+    u.tokens,
+  ]);
 
   chart.setOption({
     backgroundColor: "transparent",
@@ -64,15 +58,15 @@ async function render(): Promise<void> {
       backgroundColor: "rgba(23, 26, 36, 0.95)",
       borderColor: "rgba(255,255,255,0.1)",
       textStyle: { color: "#e5e7eb", fontSize: 12 },
+      valueFormatter: (v: unknown, seriesName?: string) =>
+        seriesName === "Balance" ? `¥${Number(v).toFixed(2)}` : String(v),
     },
     grid: { left: 12, right: 16, top: 28, bottom: 8, containLabel: true },
     xAxis: {
-      type: "category",
-      data: dates,
-      boundaryGap: true,
+      type: "time",
       axisLine: { lineStyle: { color: "rgba(255,255,255,0.12)" } },
       axisTick: { show: false },
-      axisLabel: { color: "#6b7280", fontSize: 10 },
+      axisLabel: { color: "#6b7280", fontSize: 10, hideOverlap: true },
     },
     yAxis: [
       {
@@ -101,7 +95,7 @@ async function render(): Promise<void> {
         name: "Balance",
         type: "line",
         yAxisIndex: 0,
-        data: balances,
+        data: balData,
         connectNulls: true,
         smooth: true,
         symbol: "circle",
@@ -119,7 +113,7 @@ async function render(): Promise<void> {
         name: "Tokens",
         type: "bar",
         yAxisIndex: 1,
-        data: tokens,
+        data: tokData,
         barMaxWidth: 18,
         itemStyle: { color: "rgba(96, 165, 250, 0.45)", borderRadius: [3, 3, 0, 0] },
       },
