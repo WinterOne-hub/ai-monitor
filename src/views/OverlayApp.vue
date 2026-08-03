@@ -55,6 +55,7 @@ let unlistenMove: UnlistenFn | null = null;
 let unlistenFocus: UnlistenFn | null = null;
 let moveTimer: number | null = null;
 let uiTimer: ReturnType<typeof setInterval> | null = null;
+let hoverTimer: number | null = null;
 
 const totalBalance = computed(() =>
   Object.values(balances.value).reduce((s, b) => s + b.balance, 0)
@@ -246,12 +247,31 @@ async function maybeSnapToEdge(): Promise<void> {
   }
 }
 
-/** 胶囊主点击：展开/收回 */
+/** 鼠标进入：丝滑展开 */
+function onHoverEnter(): void {
+  if (hoverTimer) window.clearTimeout(hoverTimer);
+  hoverTimer = window.setTimeout(() => {
+    if (animating.value) return;
+    if (mode.value === "capsule") void expand();
+    else if (mode.value === "edge") void expandFromEdge();
+  }, 80);
+}
+
+/** 鼠标移走：自动收起 */
+function onHoverLeave(): void {
+  if (hoverTimer) window.clearTimeout(hoverTimer);
+  hoverTimer = window.setTimeout(() => {
+    if (animating.value) return;
+    if (mode.value === "expanded") void collapseToCapsule();
+  }, 150);
+}
+
+/** 胶囊主点击：展开（hover 为主，点击兜底） */
 function onCapsuleClick(): void {
   if (mode.value === "capsule") void expand();
 }
 
-/** 边条点击：展开胶囊 */
+/** 边条点击：推出胶囊 */
 function onEdgeClick(): void {
   if (mode.value === "edge") void expandFromEdge();
 }
@@ -340,10 +360,13 @@ onMounted(async () => {
     moveTimer = window.setTimeout(() => void maybeSnapToEdge(), 350);
   });
 
-  // 点击屏幕其他地方 -> 收回胶囊
+  // 点击屏幕其他地方 -> 收回胶囊（兜底）
   unlistenFocus = await win.onFocusChanged(({ payload }) => {
-    if (!payload && mode.value === "expanded") void collapseToCapsule();
+    if (!payload && mode.value === "expanded" && !animating.value) void collapseToCapsule();
   });
+
+  // hover 交互：鼠标进入 -> 丝滑展开；鼠标移走 -> 自动收起
+  // （DOM mouseenter/mouseleave 由 template 绑定）
 
   const rawThreshold = await getSetting("low_balance_threshold");
   if (rawThreshold) lowThreshold.value = parseInt(rawThreshold, 10) || 20;
@@ -366,6 +389,7 @@ onUnmounted(() => {
   unlistenFocus?.();
   if (moveTimer) window.clearTimeout(moveTimer);
   if (uiTimer) window.clearInterval(uiTimer);
+  if (hoverTimer) window.clearTimeout(hoverTimer);
 });
 </script>
 
@@ -375,6 +399,8 @@ onUnmounted(() => {
     v-show="capsuleVisible"
     class="island capsule"
     :class="{ 'fade-out': !capsuleVisible }"
+    @mouseenter="onHoverEnter"
+    @mouseleave="onHoverLeave"
     @click="onCapsuleClick"
   >
     <div class="capsule-inner" data-tauri-drag-region>
@@ -393,7 +419,13 @@ onUnmounted(() => {
   </div>
 
   <!-- 展开卡片 -->
-  <div v-show="expandedVisible" class="island expanded" :class="{ 'fade-out': !expandedVisible }">
+  <div
+    v-show="expandedVisible"
+    class="island expanded"
+    :class="{ 'fade-out': !expandedVisible }"
+    @mouseenter="onHoverEnter"
+    @mouseleave="onHoverLeave"
+  >
     <div class="expanded-head" data-tauri-drag-region>
       <div class="head-left">
         <span class="dot" :class="{ online: !collecting }"></span>
@@ -445,6 +477,8 @@ onUnmounted(() => {
       { 'fade-out': !edgeVisible },
       edgeSide === 'right' ? 'edge-right' : 'edge-left',
     ]"
+    @mouseenter="onHoverEnter"
+    @mouseleave="onHoverLeave"
     @click="onEdgeClick"
     title="点击推出"
   >
