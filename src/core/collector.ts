@@ -117,7 +117,7 @@ export function startAutoCollect(): void {
     }
   };
   void run();
-  timer = setInterval(run, 30 * 60 * 1000); // 默认 30 分钟
+  timer = setInterval(run, 10 * 60 * 1000); // 默认 10 分钟
 }
 
 /** 读取并调整采集间隔（分钟），返回当前生效间隔 */
@@ -134,7 +134,7 @@ export async function setCollectIntervalMinutes(minutes: number): Promise<number
 
 export async function getCollectIntervalMinutes(): Promise<number> {
   const v = await getSetting("collect_interval_minutes");
-  return v ? parseInt(v, 10) : 30;
+  return v ? parseInt(v, 10) : 10;
 }
 
 /** 删除账户时同时清理系统钥匙串中的密钥 */

@@ -268,6 +268,21 @@ async function refresh(): Promise<void> {
   await loadData();
 }
 
+/** 代理记账后：距上次余额采集超过 5 分钟则顺带刷新余额 */
+async function maybeRefreshOnUsage(): Promise<void> {
+  try {
+    const t = await getSetting("last_collect_at");
+    const lastTs = t ? new Date(t).getTime() : 0;
+    if (Date.now() - lastTs > 5 * 60 * 1000) {
+      await refresh();
+    } else {
+      await loadData();
+    }
+  } catch {
+    await loadData();
+  }
+}
+
 async function loadData(): Promise<void> {
   accounts.value = await listAccounts();
   const lbs = await latestBalances();
@@ -344,8 +359,10 @@ onMounted(async () => {
   startAutoCollect();
   unlistenEvent = await listen(EVENT_BALANCE_UPDATED, () => void loadData());
 
-  // 代理记账后即时刷新
-  unlistenUsage = await listen("usage-updated", () => void loadData());
+  // 代理记账后即时刷新；若距上次余额采集 >5 分钟则顺带刷新余额（余额跟上平台）
+  unlistenUsage = await listen("usage-updated", () => {
+    void maybeRefreshOnUsage();
+  });
 
   // 兜底：每 30 秒刷新本地数据
   uiTimer = setInterval(() => void loadData(), 30_000);
