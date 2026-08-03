@@ -2,7 +2,7 @@
 name = "ai-monitor"
 version = "0.1.0"
 description = "AI 账户用量监控悬浮卡片 — 实时监控各 AI 平台账户余额与 token 用量"
-authors = ["you"]
+authors = ["AI Monitor Contributors"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
