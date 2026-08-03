@@ -43,9 +43,6 @@ const lowThreshold = ref(20);
 // 状态
 const mode = ref<Mode>("capsule");
 const edgeSide = ref<"left" | "right" | null>(null);
-const capsuleVisible = ref(true);
-const expandedVisible = ref(false);
-const edgeVisible = ref(false);
 const animating = ref(false);
 let suppressSnapUntil = 0;
 
@@ -117,14 +114,13 @@ async function getLogicalMetrics(): Promise<{
 
 async function savePos(): Promise<void> {
   const m = await getLogicalMetrics();
-  // 校正到屏幕内
   const x = Math.max(0, Math.min(m.x, Math.max(0, m.screenW - m.w)));
   const y = Math.max(0, Math.min(m.y, Math.max(0, m.screenH - m.h)));
   await setSetting("overlay_pos", JSON.stringify({ x, y }));
   await setSetting("overlay_mode", mode.value);
 }
 
-/** 窗口尺寸/位置分步动画 */
+/** 窗口尺寸/位置分步动画（easeOutCubic） */
 async function animateSize(
   fromW: number,
   toW: number,
@@ -134,7 +130,7 @@ async function animateSize(
   toX: number,
   fromY: number,
   toY: number,
-  duration = 280
+  duration = 300
 ): Promise<void> {
   const steps = Math.max(6, Math.floor(duration / 30));
   for (let i = 1; i <= steps; i++) {
@@ -150,7 +146,7 @@ async function animateSize(
   }
 }
 
-/** 移动到顶部居中（灵动岛默认位） */
+/** 移动到顶部居中 */
 async function centerTop(): Promise<void> {
   const m = await getLogicalMetrics();
   const x = Math.max(0, Math.round((m.screenW - CAPSULE_W) / 2));
@@ -158,73 +154,55 @@ async function centerTop(): Promise<void> {
   await savePos();
 }
 
-// ---------- 状态切换 ----------
+// ---------- 状态切换（抽屉式） ----------
 
-/** 胶囊 -> 展开卡片 */
+/** 胶囊 -> 展开卡片（窗口向下延伸，抽屉下拉） */
 async function expand(): Promise<void> {
   if (animating.value || mode.value === "expanded") return;
   animating.value = true;
   suppressSnapUntil = Date.now() + 2000;
-  capsuleVisible.value = false;
-  await sleep(140);
   const m = await getLogicalMetrics();
   await animateSize(m.w, CAPSULE_W, m.h, EXPANDED_H, m.x, m.x, m.y, m.y);
   mode.value = "expanded";
-  expandedVisible.value = true;
-  await sleep(80);
   animating.value = false;
   await savePos();
 }
 
-/** 卡片 -> 收回胶囊 */
+/** 卡片 -> 收回胶囊（抽屉收起） */
 async function collapseToCapsule(): Promise<void> {
   if (animating.value || mode.value !== "expanded") return;
   animating.value = true;
   suppressSnapUntil = Date.now() + 2000;
-  expandedVisible.value = false;
-  await sleep(140);
   const m = await getLogicalMetrics();
   await animateSize(m.w, CAPSULE_W, m.h, CAPSULE_H, m.x, m.x, m.y, m.y);
   mode.value = "capsule";
-  capsuleVisible.value = true;
-  await sleep(80);
   animating.value = false;
   await savePos();
 }
 
-/** 贴边 -> 小半圆（窗口贴边、完全在屏幕内，向屏幕内凸出半圆） */
+/** 贴边 -> 小半圆 */
 async function collapseToEdge(target: "left" | "right"): Promise<void> {
   if (animating.value || mode.value === "edge") return;
   animating.value = true;
   suppressSnapUntil = Date.now() + 2000;
   edgeSide.value = target;
-  // 隐藏当前内容
-  capsuleVisible.value = false;
-  expandedVisible.value = false;
-  await sleep(140);
   const m = await getLogicalMetrics();
   const toX = target === "right" ? Math.max(0, m.screenW - EDGE_W) : 0;
   await animateSize(m.w, EDGE_W, m.h, EDGE_H, m.x, toX, m.y, m.y);
   mode.value = "edge";
-  edgeVisible.value = true;
-  await sleep(80);
   animating.value = false;
   await savePos();
 }
 
-/** 半圆 -> 向屏幕内推出完整胶囊 */
+/** 半圆 -> 向屏幕内推出胶囊 */
 async function expandFromEdge(): Promise<void> {
   if (animating.value || mode.value !== "edge") return;
   animating.value = true;
   suppressSnapUntil = Date.now() + 2000;
-  edgeVisible.value = false;
-  await sleep(140);
   const m = await getLogicalMetrics();
   const toX = edgeSide.value === "right" ? Math.max(0, m.screenW - CAPSULE_W) : 0;
   await animateSize(m.w, CAPSULE_W, m.h, CAPSULE_H, m.x, toX, m.y, m.y);
   mode.value = "capsule";
-  capsuleVisible.value = true;
-  await sleep(80);
   animating.value = false;
   await savePos();
 }
@@ -234,7 +212,7 @@ async function maybeSnapToEdge(): Promise<void> {
   if (Date.now() < suppressSnapUntil) return;
   if (mode.value !== "capsule" && mode.value !== "expanded") return;
   const m = await getLogicalMetrics();
-  const EDGE_ZONE = 80; // 边缘吸附区（逻辑像素），左右对称
+  const EDGE_ZONE = 80;
   const leftDist = m.x;
   const rightDist = m.screenW - (m.x + m.w);
   let target: "left" | "right" | null = null;
@@ -247,7 +225,7 @@ async function maybeSnapToEdge(): Promise<void> {
   }
 }
 
-/** 鼠标进入：丝滑展开 */
+/** hover：鼠标进入 -> 丝滑展开 */
 function onHoverEnter(): void {
   if (hoverTimer) window.clearTimeout(hoverTimer);
   hoverTimer = window.setTimeout(() => {
@@ -257,7 +235,7 @@ function onHoverEnter(): void {
   }, 80);
 }
 
-/** 鼠标移走：自动收起 */
+/** hover：鼠标移走 -> 自动收起 */
 function onHoverLeave(): void {
   if (hoverTimer) window.clearTimeout(hoverTimer);
   hoverTimer = window.setTimeout(() => {
@@ -266,12 +244,12 @@ function onHoverLeave(): void {
   }, 150);
 }
 
-/** 胶囊主点击：展开（hover 为主，点击兜底） */
+/** 胶囊点击（兜底） */
 function onCapsuleClick(): void {
   if (mode.value === "capsule") void expand();
 }
 
-/** 边条点击：推出胶囊 */
+/** 边条点击（兜底） */
 function onEdgeClick(): void {
   if (mode.value === "edge") void expandFromEdge();
 }
@@ -338,8 +316,6 @@ onMounted(async () => {
     if (savedMode === "expanded") {
       await win.setSize(new LogicalSize(CAPSULE_W, EXPANDED_H));
       mode.value = "expanded";
-      expandedVisible.value = true;
-      capsuleVisible.value = false;
     } else if (savedMode === "edge") {
       const m = await getLogicalMetrics();
       edgeSide.value = m.x <= m.screenW / 2 ? "left" : "right";
@@ -347,14 +323,12 @@ onMounted(async () => {
       await win.setPosition(new LogicalPosition(ex, m.y));
       await win.setSize(new LogicalSize(EDGE_W, EDGE_H));
       mode.value = "edge";
-      edgeVisible.value = true;
-      capsuleVisible.value = false;
     }
   } catch (e) {
     console.error("恢复状态失败", e);
   }
 
-  // 拖动结束贴边判断（胶囊态/展开态均可拖动）
+  // 拖动结束贴边判断
   unlistenMove = await win.onMoved(() => {
     if (moveTimer) window.clearTimeout(moveTimer);
     moveTimer = window.setTimeout(() => void maybeSnapToEdge(), 350);
@@ -365,18 +339,15 @@ onMounted(async () => {
     if (!payload && mode.value === "expanded" && !animating.value) void collapseToCapsule();
   });
 
-  // hover 交互：鼠标进入 -> 丝滑展开；鼠标移走 -> 自动收起
-  // （DOM mouseenter/mouseleave 由 template 绑定）
-
   const rawThreshold = await getSetting("low_balance_threshold");
   if (rawThreshold) lowThreshold.value = parseInt(rawThreshold, 10) || 20;
   startAutoCollect();
   unlistenEvent = await listen(EVENT_BALANCE_UPDATED, () => void loadData());
 
-  // 代理记账后即时刷新（Rust emit）
+  // 代理记账后即时刷新
   unlistenUsage = await listen("usage-updated", () => void loadData());
 
-  // 兜底：每 30 秒刷新一次本地数据（开销极小，保证 UI 实时）
+  // 兜底：每 30 秒刷新本地数据
   uiTimer = setInterval(() => void loadData(), 30_000);
 
   void refresh();
@@ -394,89 +365,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- 灵动岛胶囊 -->
-  <div
-    v-show="capsuleVisible"
-    class="island capsule"
-    :class="{ 'fade-out': !capsuleVisible }"
-    @mouseenter="onHoverEnter"
-    @mouseleave="onHoverLeave"
-    @click="onCapsuleClick"
-  >
-    <div class="capsule-inner" data-tauri-drag-region>
-      <span class="dot" :class="{ online: !collecting }"></span>
-      <span class="brand" data-tauri-drag-region>AI 用量</span>
-      <span class="divider" data-tauri-drag-region></span>
-      <span class="bal" :style="{ color: statusColor(totalBalance) }" data-tauri-drag-region>
-        ¥{{ fmt(totalBalance) }}
-      </span>
-      <span class="spend" data-tauri-drag-region>-¥{{ fmt(today.cost) }}</span>
-      <span class="tok" data-tauri-drag-region>
-        {{ compactTok(today.input_tokens + today.output_tokens) }} tok
-      </span>
-      <span class="chevron">›</span>
-    </div>
-  </div>
-
-  <!-- 展开卡片 -->
-  <div
-    v-show="expandedVisible"
-    class="island expanded"
-    :class="{ 'fade-out': !expandedVisible }"
-    @mouseenter="onHoverEnter"
-    @mouseleave="onHoverLeave"
-  >
-    <div class="expanded-head" data-tauri-drag-region>
-      <div class="head-left">
-        <span class="dot" :class="{ online: !collecting }"></span>
-        <span class="brand">AI 用量监控</span>
-      </div>
-      <div class="head-actions">
-        <button class="icon-btn" title="刷新" :disabled="collecting" @click="refresh">⟳</button>
-        <button class="icon-btn" title="打开面板" @click="openDashboard">⤢</button>
-        <button class="icon-btn" title="收回" @click="collapseToCapsule">⌄</button>
-        <button class="icon-btn" title="隐藏到托盘" @click="hideOverlay">—</button>
-      </div>
-    </div>
-
-    <div class="expanded-body">
-      <div v-if="accounts.length === 0" class="empty" @click="openDashboard">
-        尚未添加账户<br />
-        <span>点击这里打开面板添加</span>
-      </div>
-      <div v-for="acc in accounts" v-else :key="acc.id" class="acc-row">
-        <div class="acc-name">{{ acc.name }}</div>
-        <div class="acc-metrics">
-          <span class="m-bal" :style="{ color: statusColor(balances[acc.id]?.balance ?? 0) }">
-            {{ balances[acc.id] ? fmt(balances[acc.id].balance) : "--" }}
-          </span>
-          <span class="m-cost">-¥{{ fmt(todayByAccount[acc.id]?.cost ?? 0) }}</span>
-          <span class="m-tok">
-            {{ compactTok((todayByAccount[acc.id]?.input_tokens ?? 0) + (todayByAccount[acc.id]?.output_tokens ?? 0)) }}
-            tok
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <div class="expanded-footer">
-      <span class="date">{{ todayLabel() }}</span>
-      <span class="tokens">
-        今日 {{ compactTok(today.input_tokens) }}/{{ compactTok(today.output_tokens) }} tok
-      </span>
-      <span class="cost">¥{{ fmt(today.cost) }}</span>
-      <span class="time">{{ lastUpdated ? "更新 " + lastUpdated : "" }}</span>
-    </div>
-  </div>
-
   <!-- 边缘小半圆 -->
   <div
-    v-show="edgeVisible"
+    v-show="mode === 'edge'"
     class="island edge"
-    :class="[
-      { 'fade-out': !edgeVisible },
-      edgeSide === 'right' ? 'edge-right' : 'edge-left',
-    ]"
+    :class="edgeSide === 'right' ? 'edge-right' : 'edge-left'"
     @mouseenter="onHoverEnter"
     @mouseleave="onHoverLeave"
     @click="onEdgeClick"
@@ -484,6 +377,61 @@ onUnmounted(() => {
   >
     <span class="dot" :class="{ online: !collecting }"></span>
     <span class="c-title">AI</span>
+  </div>
+
+  <!-- 灵动岛主体：胶囊/展开（抽屉式） -->
+  <div
+    v-show="mode !== 'edge'"
+    class="island main"
+    @mouseenter="onHoverEnter"
+    @mouseleave="onHoverLeave"
+  >
+    <!-- 顶部行（胶囊内容 / 展开 header） -->
+    <div class="cap-row" data-tauri-drag-region @click="onCapsuleClick">
+      <span class="dot" :class="{ online: !collecting }"></span>
+      <span class="brand">AI 用量</span>
+      <span class="divider"></span>
+      <span class="bal" :style="{ color: statusColor(totalBalance) }">¥{{ fmt(totalBalance) }}</span>
+      <span class="spend">-¥{{ fmt(today.cost) }}</span>
+      <span class="tok">{{ compactTok(today.input_tokens + today.output_tokens) }} tok</span>
+      <span v-if="mode === 'capsule'" class="chevron">›</span>
+      <div v-else class="head-actions">
+        <button class="icon-btn" title="刷新" :disabled="collecting" @click.stop="refresh">⟳</button>
+        <button class="icon-btn" title="打开面板" @click.stop="openDashboard">⤢</button>
+        <button class="icon-btn" title="隐藏到托盘" @click.stop="hideOverlay">—</button>
+      </div>
+    </div>
+
+    <!-- 抽屉内容（展开时下拉露出） -->
+    <div class="drawer">
+      <div class="drawer-body">
+        <div v-if="accounts.length === 0" class="empty" @click="openDashboard">
+          尚未添加账户<br />
+          <span>点击这里打开面板添加</span>
+        </div>
+        <div v-for="acc in accounts" v-else :key="acc.id" class="acc-row">
+          <div class="acc-name">{{ acc.name }}</div>
+          <div class="acc-metrics">
+            <span class="m-bal" :style="{ color: statusColor(balances[acc.id]?.balance ?? 0) }">
+              {{ balances[acc.id] ? fmt(balances[acc.id].balance) : "--" }}
+            </span>
+            <span class="m-cost">-¥{{ fmt(todayByAccount[acc.id]?.cost ?? 0) }}</span>
+            <span class="m-tok">
+              {{ compactTok((todayByAccount[acc.id]?.input_tokens ?? 0) + (todayByAccount[acc.id]?.output_tokens ?? 0)) }}
+              tok
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <span class="date">{{ todayLabel() }}</span>
+        <span class="tokens">
+          今日 {{ compactTok(today.input_tokens) }}/{{ compactTok(today.output_tokens) }} tok
+        </span>
+        <span class="cost">¥{{ fmt(today.cost) }}</span>
+        <span class="time">{{ lastUpdated ? "更新 " + lastUpdated : "" }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -493,32 +441,28 @@ onUnmounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #e5e7eb;
   user-select: none;
-  transition: opacity 0.14s ease;
   overflow: hidden;
 }
-.fade-out {
-  opacity: 0;
-  pointer-events: none;
-}
 
-/* ---- 胶囊 ---- */
-.capsule {
+/* ---- 主体（胶囊/展开共用容器） ---- */
+.main {
   width: 100%;
   height: 100vh;
-  border-radius: 32px;
-  cursor: pointer;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
 }
-.capsule-inner {
-  width: 100%;
-  height: 100%;
+
+/* 顶部行：胶囊态 64px，展开态作为 header */
+.cap-row {
+  height: 64px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 16px;
   font-size: 12px;
-}
-.capsule:hover {
-  background: rgba(26, 29, 40, 0.98);
+  cursor: pointer;
 }
 
 .dot {
@@ -569,30 +513,10 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* ---- 展开卡片 ---- */
-.expanded {
-  width: 100%;
-  height: 100vh;
-  border-radius: 20px;
-  display: flex;
-  flex-direction: column;
-}
-.expanded-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  flex-shrink: 0;
-}
-.head-left {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
 .head-actions {
   display: flex;
   gap: 2px;
+  flex-shrink: 0;
 }
 .icon-btn {
   background: transparent;
@@ -613,10 +537,17 @@ onUnmounted(() => {
   cursor: default;
 }
 
-.expanded-body {
+/* 抽屉内容（展开时随窗口高度露出） */
+.drawer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.drawer-body {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 14px;
+  padding: 2px 14px;
 }
 .empty {
   height: 100%;
@@ -634,6 +565,7 @@ onUnmounted(() => {
   font-size: 11px;
   color: #6b7280;
 }
+
 .acc-row {
   display: flex;
   align-items: center;
@@ -683,11 +615,11 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.expanded-footer {
+.drawer-footer {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 14px;
+  padding: 6px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 11px;
   color: #9ca3af;
@@ -711,7 +643,7 @@ onUnmounted(() => {
   color: #6b7280;
 }
 
-/* ---- 边缘小半圆（窗口贴边、完全在屏幕内） ---- */
+/* ---- 边缘小半圆 ---- */
 .edge {
   width: 100%;
   height: 100vh;
@@ -722,11 +654,9 @@ onUnmounted(() => {
   gap: 4px;
   cursor: pointer;
 }
-/* 左边缘：左端平面贴边，右端半圆凸出 */
 .edge-left {
   border-radius: 0 32px 32px 0;
 }
-/* 右边缘：右端平面贴边，左端半圆凸出 */
 .edge-right {
   border-radius: 32px 0 0 32px;
 }
