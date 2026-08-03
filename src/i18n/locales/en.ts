@@ -44,6 +44,7 @@ export default {
     trend: "Balance trend",
     chartBalance: "Balance",
     chartTokens: "Tokens",
+    chartZoomHint: "Scroll/pinch to zoom · drag to pan · double-click to reset",
     chartEmpty: "No balance/usage records yet\n(add an account & refresh to see trends)",
     trendRange: {
       "1": "1 day",
