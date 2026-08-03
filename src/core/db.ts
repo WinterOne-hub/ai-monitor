@@ -204,6 +204,22 @@ export async function balanceSeriesFrom(accountId: number, startDate: string): P
   );
 }
 
+/** 某账户每日 token 用量（近 N 天） */
+export async function dailyUsageSeries(
+  accountId: number,
+  days = 30
+): Promise<{ date: string; tokens: number }[]> {
+  const d = getDb();
+  return d.select<{ date: string; tokens: number }[]>(
+    `SELECT date, COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens
+     FROM daily_usage
+     WHERE account_id = $1 AND date >= date('now', 'localtime', $2)
+     GROUP BY date
+     ORDER BY date ASC`,
+    [accountId, `-${days} days`]
+  );
+}
+
 /** 某账户累计估算消耗（token×单价，用于聚合平台余额推算） */
 export async function accountTotalEstimatedCost(accountId: number): Promise<number> {
   const d = getDb();
