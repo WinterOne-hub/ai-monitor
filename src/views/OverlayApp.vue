@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWindow, currentMonitor } from "@tauri-apps/api/window";
+import { getCurrentWindow, currentMonitor, cursorPosition } from "@tauri-apps/api/window";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import {
   initDb,
@@ -60,7 +60,9 @@ let unlistenMove: UnlistenFn | null = null;
 let unlistenFocus: UnlistenFn | null = null;
 let moveTimer: number | null = null;
 let uiTimer: ReturnType<typeof setInterval> | null = null;
+let cursorTimer: ReturnType<typeof setInterval> | null = null;
 let hoverTimer: number | null = null;
+let dragging = false; // 正在拖动：抑制 hover 展开（让胶囊可拖）
 
 const totalBalance = computed(() =>
   Object.values(balances.value).reduce((s, b) => s + b.balance, 0)
@@ -174,7 +176,7 @@ async function centerTop(): Promise<void> {
 async function expand(): Promise<void> {
   if (animating.value || mode.value === "expanded") return;
   animating.value = true;
-  suppressSnapUntil = Date.now() + 2000;
+  suppressSnapUntil = Date.now() + 800;
   const m = await getLogicalMetrics();
   await animateSize(m.w, CAPSULE_W, m.h, EXPANDED_H, m.x, m.x, m.y, m.y);
   mode.value = "expanded";
@@ -186,7 +188,7 @@ async function expand(): Promise<void> {
 async function collapseToCapsule(): Promise<void> {
   if (animating.value || mode.value !== "expanded") return;
   animating.value = true;
-  suppressSnapUntil = Date.now() + 2000;
+  suppressSnapUntil = Date.now() + 800;
   const m = await getLogicalMetrics();
   await animateSize(m.w, CAPSULE_W, m.h, CAPSULE_H, m.x, m.x, m.y, m.y);
   mode.value = "capsule";
@@ -198,7 +200,7 @@ async function collapseToCapsule(): Promise<void> {
 async function collapseToEdge(target: "left" | "right"): Promise<void> {
   if (animating.value || mode.value === "edge") return;
   animating.value = true;
-  suppressSnapUntil = Date.now() + 2000;
+  suppressSnapUntil = Date.now() + 800;
   edgeSide.value = target;
   const m = await getLogicalMetrics();
   const toX = target === "right" ? Math.max(0, m.screenW - EDGE_W) : 0;
@@ -212,7 +214,7 @@ async function collapseToEdge(target: "left" | "right"): Promise<void> {
 async function expandFromEdge(): Promise<void> {
   if (animating.value || mode.value !== "edge") return;
   animating.value = true;
-  suppressSnapUntil = Date.now() + 2000;
+  suppressSnapUntil = Date.now() + 800;
   const m = await getLogicalMetrics();
   const toX = edgeSide.value === "right" ? Math.max(0, m.screenW - CAPSULE_W) : 0;
   await animateSize(m.w, CAPSULE_W, m.h, CAPSULE_H, m.x, toX, m.y, m.y);
@@ -221,12 +223,12 @@ async function expandFromEdge(): Promise<void> {
   await savePos();
 }
 
-/** 拖动结束：距边缘较近则吸附折叠成小半圆 */
+/** 拖动结束：只要一侧边界触碰到屏幕边缘就收成小半圆 */
 async function maybeSnapToEdge(): Promise<void> {
   if (Date.now() < suppressSnapUntil) return;
   if (mode.value !== "capsule" && mode.value !== "expanded") return;
   const m = await getLogicalMetrics();
-  const EDGE_ZONE = 80;
+  const EDGE_ZONE = 30; // 触边容差（逻辑像素）
   const leftDist = m.x;
   const rightDist = m.screenW - (m.x + m.w);
   let target: "left" | "right" | null = null;
@@ -243,7 +245,7 @@ async function maybeSnapToEdge(): Promise<void> {
 function onHoverEnter(): void {
   if (hoverTimer) window.clearTimeout(hoverTimer);
   hoverTimer = window.setTimeout(() => {
-    if (animating.value) return;
+    if (animating.value || dragging) return;
     if (mode.value === "capsule") void expand();
     else if (mode.value === "edge") void expandFromEdge();
   }, 80);
@@ -253,7 +255,7 @@ function onHoverEnter(): void {
 function onHoverLeave(): void {
   if (hoverTimer) window.clearTimeout(hoverTimer);
   hoverTimer = window.setTimeout(() => {
-    if (animating.value) return;
+    if (animating.value || dragging) return;
     if (mode.value === "expanded") void collapseToCapsule();
   }, 150);
 }
@@ -334,6 +336,8 @@ async function loadData(): Promise<void> {
 }
 
 function openDashboard(): void {
+  // 打开面板时隐藏灵动岛（二者互斥）
+  void invoke("hide_window", { label: "overlay" });
   void invoke("show_window", { label: "dashboard" });
 }
 function hideOverlay(): void {
@@ -396,6 +400,45 @@ onMounted(async () => {
   // 兜底：每 30 秒刷新本地数据
   uiTimer = setInterval(() => void loadData(), 30_000);
 
+  // 光标位置轮询：鼠标在窗口内直接展开，移走自动收回（可靠 hover）
+  cursorTimer = setInterval(() => {
+    void (async () => {
+      if (animating.value) return;
+      const visible = await win.isVisible().catch(() => false);
+      if (!visible) return;
+      let inside = false;
+      try {
+        const cur = await cursorPosition();
+        const pos = await win.outerPosition();
+        const size = await win.outerSize();
+        inside =
+          cur.x >= pos.x &&
+          cur.x <= pos.x + size.width &&
+          cur.y >= pos.y &&
+          cur.y <= pos.y + size.height;
+      } catch {
+        return;
+      }
+      if (inside && !dragging) {
+        if (mode.value === "capsule") void expand();
+        else if (mode.value === "edge") void expandFromEdge();
+      } else if (!inside) {
+        if (mode.value === "expanded") void collapseToCapsule();
+      }
+    })();
+  }, 200);
+
+  // 拖动抑制：按下时不让 hover 误展开（胶囊可直接拖动）
+  const onDown = () => {
+    dragging = true;
+    if (hoverTimer) window.clearTimeout(hoverTimer);
+  };
+  const onUp = () => {
+    dragging = false;
+  };
+  window.addEventListener("mousedown", onDown);
+  window.addEventListener("mouseup", onUp);
+
   void refresh();
 });
 
@@ -406,6 +449,7 @@ onUnmounted(() => {
   unlistenFocus?.();
   if (moveTimer) window.clearTimeout(moveTimer);
   if (uiTimer) window.clearInterval(uiTimer);
+  if (cursorTimer) window.clearInterval(cursorTimer);
   if (hoverTimer) window.clearTimeout(hoverTimer);
 });
 </script>

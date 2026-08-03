@@ -38,6 +38,10 @@ pub fn create_tray(app: &tauri::App) -> tauri::Result<()> {
 }
 
 fn show_dashboard(app: &AppHandle) {
+    // 显示面板时隐藏灵动岛（二者互斥）
+    if let Some(ov) = app.get_webview_window("overlay") {
+        let _ = ov.hide();
+    }
     if let Some(w) = app.get_webview_window("dashboard") {
         let _ = w.show();
         let _ = w.set_focus();

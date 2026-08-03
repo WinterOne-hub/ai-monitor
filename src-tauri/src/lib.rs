@@ -25,17 +25,36 @@ pub fn run() {
             // 启动统一代理（本地 HTTP，自动记录 token 用量）
             proxy::start(app.handle().clone());
 
+            let handle = app.handle().clone();
+            let handle2 = app.handle().clone();
+
             // 关闭窗口 = 隐藏到托盘，进程常驻
-            for label in ["dashboard", "overlay"] {
-                if let Some(w) = app.get_webview_window(label) {
-                    let w2 = w.clone();
-                    w.on_window_event(move |event| {
-                        if let WindowEvent::CloseRequested { api, .. } = event {
-                            api.prevent_close();
-                            let _ = w2.hide();
+            // dashboard 关闭 -> 隐藏 + 回归灵动岛
+            if let Some(w) = app.get_webview_window("dashboard") {
+                let w2 = w.clone();
+                w.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = w2.hide();
+                        // 面板隐藏后回归灵动岛
+                        if let Some(ov) = handle.get_webview_window("overlay") {
+                            let _ = ov.show();
                         }
-                    });
-                }
+                    }
+                });
+            }
+            if let Some(w) = app.get_webview_window("overlay") {
+                let w2 = w.clone();
+                w.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = w2.hide();
+                        // 岛隐藏时面板也进托盘
+                        if let Some(d) = handle2.get_webview_window("dashboard") {
+                            let _ = d.hide();
+                        }
+                    }
+                });
             }
 
             // 首次启动显示主面板（引导添加账户）；后续由托盘/悬浮卡控制

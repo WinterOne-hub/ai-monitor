@@ -392,6 +392,8 @@ async function syncPrices(): Promise<void> {
 
 function hidePanel(): void {
   void invoke("hide_window", { label: "dashboard" });
+  // 面板隐藏后回归灵动岛
+  void invoke("show_window", { label: "overlay" });
 }
 
 let unlisten: UnlistenFn | null = null;
