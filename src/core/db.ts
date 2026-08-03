@@ -255,6 +255,22 @@ export async function todayUsageTotal(): Promise<{ input_tokens: number; output_
   return rows[0] ?? { input_tokens: 0, output_tokens: 0, cost: 0 };
 }
 
+/** 今日每个账户的用量与消耗 */
+export async function todayUsageByAccount(): Promise<
+  { account_id: number; input_tokens: number; output_tokens: number; cost: number }[]
+> {
+  const d = getDb();
+  return d.select<{ account_id: number; input_tokens: number; output_tokens: number; cost: number }[]>(
+    `SELECT account_id,
+            COALESCE(SUM(input_tokens), 0) AS input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS output_tokens,
+            COALESCE(SUM(cost), 0) AS cost
+     FROM daily_usage
+     WHERE date = date('now', 'localtime')
+     GROUP BY account_id`
+  );
+}
+
 /** 最近 N 天各账户用量（跨账户联表） */
 export interface RecentUsageRow {
   id: number;
