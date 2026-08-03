@@ -9,13 +9,9 @@ Built with [Tauri 2](https://tauri.app) — **~6MB installer, ~100MB RAM**. Data
 
 ---
 
-## 📸 Screenshots
+## 📸 Demo
 
 ![Demo](screenshots/demo.gif)
-
-![Island](screenshots/island.png) ![Expanded](screenshots/expanded.png)
-
-![Dashboard](screenshots/dashboard.png)
 
 ---
 
