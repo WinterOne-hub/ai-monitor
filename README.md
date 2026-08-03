@@ -19,13 +19,14 @@ Built with [Tauri 2](https://tauri.app) — **~6MB installer, ~100MB RAM**. Data
 
 | | Feature | 说明 |
 |--|---------|------|
-| 🎴 | **Dynamic Island overlay** | Floating capsule on screen; hover to expand (drawer animation), move away to collapse; drag to screen edge to dock as a half-circle |
+| 🎴 | **Dynamic Island overlay** | Floating capsule; hover to expand (drawer animation), move away to collapse; draggable in both modes; snap to screen edge as a half-circle |
 | 💰 | **Multi-platform balance** | Auto query via official APIs: DeepSeek, Kimi (Moonshot), SiliconFlow, OpenRouter |
-| 🔢 | **Token usage tracking** | Built-in local proxy records every API call automatically (OpenAI & Anthropic formats) |
-| 💵 | **Accurate spend** | Cost is derived from **balance diff** (real billing), token×price as backup estimate |
-| 📊 | **Balance trend chart** | 1-day / 7-day / 30-day / custom range |
+| 🔢 | **Token usage tracking** | Built-in local proxy records every call — **minute-level events** (OpenAI & Anthropic formats) |
+| 📊 | **Composite trend chart** | Balance line + token line on one time axis; **zoom by wheel/pinch/drag**, ranges 1d/7d/30d/custom (start+end) |
+| 💵 | **Accurate spend** | Cost from **balance diff** (real billing) or **token × model price** (aggregators) |
+| 🌐 | **i18n** | Auto-detects system language (中文 / English) |
 | 🚨 | **Alerts** | Low-balance system notifications + Webhook (ServerChan / Feishu / DingTalk / Bark) |
-| 🔒 | **Privacy** | API keys encrypted in OS keychain; all data stored locally |
+| 🔒 | **Privacy** | API keys encrypted in OS keychain; all data stays local |
 
 ---
 
