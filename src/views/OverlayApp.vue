@@ -30,12 +30,15 @@ type Mode = "capsule" | "expanded" | "edge";
 
 const accounts = ref<AccountRow[]>([]);
 const balances = ref<Record<number, { balance: number; currency: string }>>({});
-const today = ref<{ input_tokens: number; output_tokens: number; cost: number }>({
+const today = ref<{ input_tokens: number; output_tokens: number; cost: number; cost_estimated: number }>({
   input_tokens: 0,
   output_tokens: 0,
   cost: 0,
+  cost_estimated: 0,
 });
-const todayByAccount = ref<Record<number, { input_tokens: number; output_tokens: number; cost: number }>>({});
+const todayByAccount = ref<
+  Record<number, { input_tokens: number; output_tokens: number; cost: number; cost_estimated: number }>
+>({});
 const collecting = ref(false);
 const lastUpdated = ref("");
 const lowThreshold = ref(20);
@@ -80,6 +83,11 @@ function statusColor(balance: number): string {
   if (balance <= lowThreshold.value) return "#f87171";
   if (balance <= lowThreshold.value * 3) return "#fbbf24";
   return "#34d399";
+}
+
+/** 显示消耗金额：余额差值有效用差值（准确），否则回退 token×单价估算 */
+function displayCost(cost: number, costEstimated: number): number {
+  return cost > 0.0001 ? cost : costEstimated;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -293,9 +301,14 @@ async function loadData(): Promise<void> {
   balances.value = map;
   today.value = await todayUsageTotal();
   const byAcc = await todayUsageByAccount();
-  const accMap: Record<number, { input_tokens: number; output_tokens: number; cost: number }> = {};
+  const accMap: Record<number, { input_tokens: number; output_tokens: number; cost: number; cost_estimated: number }> = {};
   for (const u of byAcc) {
-    accMap[u.account_id] = { input_tokens: u.input_tokens, output_tokens: u.output_tokens, cost: u.cost };
+    accMap[u.account_id] = {
+      input_tokens: u.input_tokens,
+      output_tokens: u.output_tokens,
+      cost: u.cost,
+      cost_estimated: u.cost_estimated,
+    };
   }
   todayByAccount.value = accMap;
   const t = await getSetting("last_collect_at");
@@ -409,7 +422,7 @@ onUnmounted(() => {
       <span class="brand">AI 用量</span>
       <span class="divider"></span>
       <span class="bal" :style="{ color: statusColor(totalBalance) }">¥{{ fmt(totalBalance) }}</span>
-      <span class="spend">-¥{{ fmt(today.cost) }}</span>
+      <span class="spend">-¥{{ fmt(displayCost(today.cost, today.cost_estimated)) }}</span>
       <span class="tok">{{ compactTok(today.input_tokens + today.output_tokens) }} tok</span>
       <span v-if="mode === 'capsule'" class="chevron">›</span>
       <div v-else class="head-actions">
@@ -432,7 +445,7 @@ onUnmounted(() => {
             <span class="m-bal" :style="{ color: statusColor(balances[acc.id]?.balance ?? 0) }">
               {{ balances[acc.id] ? fmt(balances[acc.id].balance) : "--" }}
             </span>
-            <span class="m-cost">-¥{{ fmt(todayByAccount[acc.id]?.cost ?? 0) }}</span>
+            <span class="m-cost">-¥{{ fmt(displayCost(todayByAccount[acc.id]?.cost ?? 0, todayByAccount[acc.id]?.cost_estimated ?? 0)) }}</span>
             <span class="m-tok">
               {{ compactTok((todayByAccount[acc.id]?.input_tokens ?? 0) + (todayByAccount[acc.id]?.output_tokens ?? 0)) }}
               tok
@@ -445,7 +458,7 @@ onUnmounted(() => {
         <span class="tokens">
           今日 {{ compactTok(today.input_tokens) }}/{{ compactTok(today.output_tokens) }} tok
         </span>
-        <span class="cost">¥{{ fmt(today.cost) }}</span>
+        <span class="cost">¥{{ fmt(displayCost(today.cost, today.cost_estimated)) }}</span>
         <span class="time">{{ lastUpdated ? "更新 " + lastUpdated : "" }}</span>
       </div>
     </div>

@@ -40,10 +40,11 @@ type Tab = "accounts" | "usage" | "settings";
 const tab = ref<Tab>("accounts");
 const accounts = ref<AccountRow[]>([]);
 const balances = ref<Record<number, { balance: number; currency: string; fetched_at: string }>>({});
-const today = ref<{ input_tokens: number; output_tokens: number; cost: number }>({
+const today = ref<{ input_tokens: number; output_tokens: number; cost: number; cost_estimated: number }>({
   input_tokens: 0,
   output_tokens: 0,
   cost: 0,
+  cost_estimated: 0,
 });
 const collecting = ref(false);
 const toast = ref("");
@@ -74,6 +75,11 @@ function fmt(n: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+/** 显示消耗金额：余额差值有效用差值，否则回退 token×单价估算 */
+function displayCost(cost: number, costEstimated: number): number {
+  return cost > 0.0001 ? cost : costEstimated;
 }
 
 async function loadData(): Promise<void> {
@@ -411,7 +417,7 @@ onUnmounted(() => {
           </div>
           <div class="stat-card">
             <div class="stat-label">今日消耗</div>
-            <div class="stat-value">{{ fmt(today.cost) }} <span class="unit">¥</span></div>
+            <div class="stat-value">{{ fmt(displayCost(today.cost, today.cost_estimated)) }} <span class="unit">¥</span></div>
           </div>
         </div>
 
@@ -516,7 +522,7 @@ onUnmounted(() => {
             </div>
             <div class="usage-item">
               <div class="usage-label">估算费用</div>
-              <div class="usage-value">¥{{ fmt(today.cost) }}</div>
+              <div class="usage-value">¥{{ fmt(displayCost(today.cost, today.cost_estimated)) }}</div>
             </div>
           </div>
           <p class="hint">token 数据由统一代理自动记录；把调用地址指向 127.0.0.1:8899 即可。</p>
