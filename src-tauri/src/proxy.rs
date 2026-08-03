@@ -319,26 +319,30 @@ async fn record_usage_to_db(st: &ProxyState, provider: &str, model: Option<&str>
         }
     }
 
-    // 费用 = token * 单价 / 1M
-    let cost = (u.input - u.cache_hit) as f64 * input_price / 1_000_000.0
+    // 费用 = token * 单价 / 1M（估算值，写入 cost_estimated；
+    // cost 列由「余额差值」同步为真实消耗）
+    let cost_estimated = (((u.input - u.cache_hit) as f64 * input_price / 1_000_000.0
         + u.cache_hit as f64 * cache_hit_price / 1_000_000.0
-        + u.output as f64 * output_price / 1_000_000.0;
+        + u.output as f64 * output_price / 1_000_000.0)
+        * 1000.0)
+        .round()
+        / 1000.0;
 
     let _ = sqlx::query(
-        "INSERT INTO daily_usage (account_id, date, input_tokens, output_tokens, cache_hit_tokens, cost, source)
-         VALUES (?1, date('now','localtime'), ?2, ?3, ?4, ?5, 'proxy')
+        "INSERT INTO daily_usage (account_id, date, input_tokens, output_tokens, cache_hit_tokens, cost, cost_estimated, source)
+         VALUES (?1, date('now','localtime'), ?2, ?3, ?4, 0, ?5, 'proxy')
          ON CONFLICT(account_id, date) DO UPDATE SET
            input_tokens = input_tokens + excluded.input_tokens,
            output_tokens = output_tokens + excluded.output_tokens,
            cache_hit_tokens = cache_hit_tokens + excluded.cache_hit_tokens,
-           cost = cost + excluded.cost,
+           cost_estimated = cost_estimated + excluded.cost_estimated,
            source = 'proxy'",
     )
     .bind(account_id)
     .bind(u.input)
     .bind(u.output)
     .bind(u.cache_hit)
-    .bind(cost)
+    .bind(cost_estimated)
     .execute(&pool)
     .await;
 

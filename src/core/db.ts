@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS daily_usage (
   output_tokens INTEGER DEFAULT 0,
   cache_hit_tokens INTEGER DEFAULT 0,
   cost REAL DEFAULT 0,
+  cost_estimated REAL DEFAULT 0,
   source TEXT DEFAULT 'manual',
   UNIQUE(account_id, date)
 );
@@ -105,6 +106,12 @@ export async function initDb(): Promise<Database> {
   if (db) return db;
   db = await Database.load("sqlite:ai-monitor.db");
   await db.execute(SCHEMA);
+  // 老库迁移：补充 cost_estimated 列
+  try {
+    await db.execute("ALTER TABLE daily_usage ADD COLUMN cost_estimated REAL DEFAULT 0");
+  } catch {
+    // 列已存在，忽略
+  }
   return db;
 }
 
