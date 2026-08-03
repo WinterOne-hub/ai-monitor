@@ -42,6 +42,9 @@ export default {
     registerBalance: "Set balance",
     delete: "Delete",
     trend: "Balance trend",
+    chartBalance: "Balance",
+    chartTokens: "Tokens",
+    chartEmpty: "No balance/usage records yet\n(add an account & refresh to see trends)",
     trendRange: {
       "1": "1 day",
       "7": "7 days",

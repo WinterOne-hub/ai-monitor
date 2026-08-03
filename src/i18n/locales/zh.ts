@@ -42,6 +42,9 @@ export default {
     registerBalance: "登记余额",
     delete: "删除",
     trend: "余额趋势",
+    chartBalance: "余额",
+    chartTokens: "Token",
+    chartEmpty: "暂无余额/用量记录\n（添加账户并刷新后显示趋势）",
     trendRange: {
       "1": "近 1 日",
       "7": "近 7 日",
