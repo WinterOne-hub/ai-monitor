@@ -141,10 +141,10 @@ export async function addAccount(providerId: string, name: string): Promise<numb
   const d = getDb();
   // 注意：不能用 SELECT last_insert_rowid()（连接池下可能拿到其他连接的 0），
   // 必须用 execute 返回的 lastInsertId（插件在同一连接内获取）
-  const result = await d.execute(
-    "INSERT INTO accounts (provider_id, name) VALUES ($1, $2)",
-    [providerId, name]
-  );
+  const result = await d.execute("INSERT INTO accounts (provider_id, name) VALUES ($1, $2)", [
+    providerId,
+    name,
+  ]);
   return result.lastInsertId ?? 0;
 }
 
@@ -186,9 +186,9 @@ export async function latestBalances(): Promise<
     `SELECT s.account_id, s.balance, s.currency, s.fetched_at
      FROM balance_snapshots s
      INNER JOIN (
-       SELECT account_id, MAX(fetched_at) AS max_at
+       SELECT account_id, MAX(id) AS max_id
        FROM balance_snapshots GROUP BY account_id
-     ) m ON s.account_id = m.account_id AND s.fetched_at = m.max_at`
+     ) m ON s.id = m.max_id`
   );
 }
 
@@ -204,7 +204,10 @@ export async function balanceSeries(accountId: number, days = 30): Promise<Balan
 }
 
 /** 某账户从指定日期起的余额趋势（自定义范围） */
-export async function balanceSeriesFrom(accountId: number, startDate: string): Promise<BalanceRow[]> {
+export async function balanceSeriesFrom(
+  accountId: number,
+  startDate: string
+): Promise<BalanceRow[]> {
   const d = getDb();
   return d.select<BalanceRow[]>(
     `SELECT * FROM balance_snapshots
@@ -278,37 +281,32 @@ export async function upsertDailyUsage(
   usage: { input?: number; output?: number; cacheHit?: number; cost?: number; source?: string }
 ): Promise<void> {
   const d = getDb();
-  const existing = await d.select<DailyUsageRow[]>(
-    "SELECT * FROM daily_usage WHERE account_id = $1 AND date = $2",
-    [accountId, date]
-  );
-  if (existing.length > 0) {
-    const row = existing[0];
-    await d.execute(
-      `UPDATE daily_usage SET
-         input_tokens = input_tokens + $3,
-         output_tokens = output_tokens + $4,
-         cache_hit_tokens = cache_hit_tokens + $5,
-         cost = cost + $6,
-         source = $7
-       WHERE id = $1`,
-      [
-        row.id,
-        accountId,
-        usage.input ?? 0,
-        usage.output ?? 0,
-        usage.cacheHit ?? 0,
-        usage.cost ?? 0,
-        usage.source ?? row.source,
-      ]
-    );
-  } else {
-    await d.execute(
-      `INSERT INTO daily_usage (account_id, date, input_tokens, output_tokens, cache_hit_tokens, cost, source)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [accountId, date, usage.input ?? 0, usage.output ?? 0, usage.cacheHit ?? 0, usage.cost ?? 0, usage.source ?? "manual"]
-    );
+  const cols = ["account_id", "date", "input_tokens", "output_tokens", "cache_hit_tokens", "cost"];
+  const vals: (number | string)[] = [
+    accountId,
+    date,
+    usage.input ?? 0,
+    usage.output ?? 0,
+    usage.cacheHit ?? 0,
+    usage.cost ?? 0,
+  ];
+  // source 仅在显式提供时写入：新行用给定值（缺省走表 DEFAULT 'manual'），
+  // 冲突更新时 COALESCE(excluded.source, 旧值) 即「未提供则保留原值」。
+  if (usage.source !== undefined) {
+    cols.push("source");
+    vals.push(usage.source);
   }
+  const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
+  await d.execute(
+    `INSERT INTO daily_usage (${cols.join(", ")}) VALUES (${placeholders})
+     ON CONFLICT(account_id, date) DO UPDATE SET
+       input_tokens = daily_usage.input_tokens + excluded.input_tokens,
+       output_tokens = daily_usage.output_tokens + excluded.output_tokens,
+       cache_hit_tokens = daily_usage.cache_hit_tokens + excluded.cache_hit_tokens,
+       cost = daily_usage.cost + excluded.cost,
+       source = COALESCE(excluded.source, daily_usage.source)`,
+    vals
+  );
 }
 
 export async function listDailyUsage(accountId: number, days = 30): Promise<DailyUsageRow[]> {
@@ -337,9 +335,7 @@ export async function todayUsageTotal(): Promise<{
             COALESCE(SUM(cost_estimated), 0) AS cost_estimated
      FROM daily_usage WHERE date = date('now', 'localtime')`
   );
-  return (
-    rows[0] ?? { input_tokens: 0, output_tokens: 0, cost: 0, cost_estimated: 0 }
-  );
+  return rows[0] ?? { input_tokens: 0, output_tokens: 0, cost: 0, cost_estimated: 0 };
 }
 
 /** 今日每个账户的用量与消耗 */
@@ -400,11 +396,67 @@ export async function listRecentUsage(days = 7): Promise<RecentUsageRow[]> {
   );
 }
 
-// ---------------- settings ----------------
+// ---------------- 月度账单 & 模型排行 ----------------
 
+/** 最近 N 个月的月度汇总（费用取权威值 cost，token 为合计） */
+export interface MonthlyUsageRow {
+  month: string;
+  cost: number;
+  cost_estimated: number;
+  input_tokens: number;
+  output_tokens: number;
+  days: number;
+}
+
+export async function monthlyUsageSummary(months = 6): Promise<MonthlyUsageRow[]> {
+  const d = getDb();
+  return d.select<MonthlyUsageRow[]>(
+    `SELECT substr(date, 1, 7) AS month,
+            COALESCE(SUM(cost), 0) AS cost,
+            COALESCE(SUM(cost_estimated), 0) AS cost_estimated,
+            COALESCE(SUM(input_tokens), 0) AS input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS output_tokens,
+            COUNT(DISTINCT date) AS days
+     FROM daily_usage
+     WHERE date >= date('now', 'localtime', $1)
+     GROUP BY month
+     ORDER BY month ASC`,
+    [`-${Math.max(1, months) * 30} days`]
+  );
+}
+
+/** 近 N 天各模型用量排行（源数据来自代理记录的 usage_events） */
+export interface ModelUsageRow {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cost_estimated: number;
+  calls: number;
+}
+
+export async function usageByModel(days = 30, limit = 10): Promise<ModelUsageRow[]> {
+  const d = getDb();
+  return d.select<ModelUsageRow[]>(
+    `SELECT COALESCE(model, 'unknown') AS model,
+            COALESCE(SUM(input_tokens), 0) AS input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS output_tokens,
+            COALESCE(SUM(cost_estimated), 0) AS cost_estimated,
+            COUNT(*) AS calls
+     FROM usage_events
+     WHERE created_at >= datetime('now', 'localtime', $1)
+     GROUP BY model
+     ORDER BY cost_estimated DESC
+     LIMIT $2`,
+    [`-${days} days`, limit]
+  );
+}
+
+// ---------------- settings ----------------
 export async function getSetting(key: string): Promise<string | null> {
   const d = getDb();
-  const rows = await d.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [key]);
+  const rows = await d.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [
+    key,
+  ]);
   return rows.length > 0 ? rows[0].value : null;
 }
 

@@ -1,8 +1,28 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
-import * as echarts from "echarts";
+import * as echarts from "echarts/core";
+import { LineChart } from "echarts/charts";
+import {
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  DataZoomComponent,
+} from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+import type { ECharts } from "echarts/core";
 import { useI18n } from "vue-i18n";
 import { balanceSeriesFrom, usageEventsFrom, initDb } from "../core/db";
+
+echarts.use([
+  LineChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  DataZoomComponent,
+  CanvasRenderer,
+]);
 
 const props = defineProps<{
   accountId: number | null;
@@ -13,7 +33,7 @@ const props = defineProps<{
 
 const { t } = useI18n();
 const chartEl = ref<HTMLDivElement | null>(null);
-let chart: echarts.ECharts | null = null;
+let chart: ECharts | null = null;
 
 /** Safari/WKWebView 不解析 'YYYY-MM-DD HH:MM:SS'，需转 ISO */
 function parseLocal(s: string): number {
@@ -34,9 +54,7 @@ async function render(): Promise<void> {
     startDateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   }
   const xMin = new Date(startDateStr + "T00:00:00").getTime();
-  const xMax = props.endDate
-    ? new Date(props.endDate + "T23:59:59").getTime()
-    : now;
+  const xMax = props.endDate ? new Date(props.endDate + "T23:59:59").getTime() : now;
 
   // 余额快照 + token 事件（均按起始日期查询）
   const balRows = await balanceSeriesFrom(props.accountId, startDateStr);
@@ -57,10 +75,7 @@ async function render(): Promise<void> {
   }
 
   const balData = balRows.map((r) => [parseLocal(r.fetched_at), r.balance]);
-  const tokData = tokRows.map((r) => [
-    parseLocal(r.created_at),
-    r.input_tokens + r.output_tokens,
-  ]);
+  const tokData = tokRows.map((r) => [parseLocal(r.created_at), r.input_tokens + r.output_tokens]);
 
   // 时间轴格式：按范围跨度统一（短范围显示时间，长范围显示日期）
   const spanMs = xMax - xMin;

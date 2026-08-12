@@ -1,11 +1,30 @@
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
   color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* ---- 设计变量（统一色板） ---- */
+  --c-bg: #0f1117;
+  --c-panel: rgba(255, 255, 255, 0.03);
+  --c-border: rgba(255, 255, 255, 0.06);
+  --c-border-strong: rgba(255, 255, 255, 0.1);
+  --c-text: #e5e7eb;
+  --c-text-secondary: #d1d5db;
+  --c-text-dim: #9ca3af;
+  --c-text-faint: #6b7280;
+  --c-accent: #10b981;
+  --c-accent-strong: #34d399;
+  --c-danger: #f87171;
+  --c-warn: #fbbf24;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.4);
+  --island-bg: rgba(18, 20, 28, 0.96);
 }
 
 html,

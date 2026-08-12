@@ -36,6 +36,16 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Rust tests
+        run: cargo test
+        working-directory: src-tauri
+
       - name: Build (macOS)
         if: matrix.platform == 'macos-latest'
         run: npm run tauri build

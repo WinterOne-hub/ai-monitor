@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>AI Monitor · 小红书配图</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0a;
+  --yellow:#FFE600;
+  --pink:#FF2D7B;
+  --blue:#00C2FF;
+  --orange:#FF6B00;
+  --green:#00E676;
+  --purple:#A463FF;
+  --white:#fff;
+  --gray:#666;
+}
+body{
+  background:#1a1a1a;
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  display:flex;flex-direction:column;align-items:center;gap:28px;padding:40px;
+}
+.tip{
+  color:#888;font-size:14px;text-align:center;line-height:1.6;max-width:1080px;
+}
+.card{
+  width:1080px;height:1440px;background:var(--bg);
+  position:relative;overflow:hidden;color:var(--white);flex-shrink:0;
+}
+/* 公共元素 */
+.tag{
+  display:inline-block;padding:10px 24px;font-size:28px;font-weight:800;
+  letter-spacing:2px;
+}
+.screenshot{
+  background:#111;border:3px dashed #333;border-radius:20px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  color:#444;font-size:26px;font-weight:700;text-align:center;line-height:1.5;
+}
+.screenshot small{font-size:18px;font-weight:400;color:#333;margin-top:8px}
+.dot{font-size:36px}
+.num{
+  width:72px;height:72px;border-radius:18px;display:flex;align-items:center;
+  justify-content:center;font-size:36px;font-weight:900;flex-shrink:0;color:#0a0a0a;
+}
+.shot-img{
+  width:100%;height:100%;object-fit:cover;border-radius:inherit;
+}
+/* 胶囊图用 contain（保完整） */
+.shot-contain{
+  width:100%;height:100%;object-fit:contain;border-radius:inherit;
+  background:#fff;
+}
+/* 装饰色块 */
+.blk{position:absolute;border-radius:0}
+</style>
+</head>
+<body>
+
+<div class="tip">
+📐 每张卡片 1080×1440（3:4 竖版）｜导出方式：Chrome 打开本文件 → F12 → Cmd+Shift+P → 输入 "Capture node screenshot" → 鼠标选中要导出的 .card 回车<br>
+或者用 Chrome 扩展 GoFullPage / 按 Cmd+P 另存 PDF 后再拆分
+</div>
+
+<!-- ============ Card 1 · 封面 ============ -->
+<div class="card" id="c1">
+  <!-- 装饰色块 -->
+  <div class="blk" style="top:-80px;right:-80px;width:360px;height:360px;background:var(--pink);transform:rotate(15deg)"></div>
+  <div class="blk" style="bottom:200px;left:-60px;width:180px;height:180px;background:var(--blue);border-radius:50%"></div>
+  <div class="blk" style="top:540px;right:60px;width:120px;height:120px;background:var(--orange);border-radius:50%"></div>
+
+  <!-- 顶部标签 -->
+  <div style="position:absolute;top:80px;left:80px">
+    <span class="tag" style="background:var(--yellow);color:#0a0a0a">⚡ 开源免费 · 开发者私房工具</span>
+  </div>
+
+  <!-- 巨型主标题 -->
+  <div style="position:absolute;top:180px;left:80px;right:80px">
+    <div style="font-size:180px;font-weight:900;line-height:0.92;letter-spacing:-4px">
+      <span style="color:var(--yellow)">API</span><br>
+      <span style="color:var(--white)">花钱</span><br>
+      <span style="color:var(--pink)">没底？</span>
+    </div>
+  </div>
+
+  <!-- 副标 -->
+  <div style="position:absolute;top:720px;left:80px;right:80px">
+    <div style="font-size:64px;font-weight:800;color:var(--blue);line-height:1.1">
+      一个灵动岛<br>全管住 🎴
+    </div>
+  </div>
+
+  <!-- 灵动岛截图占位 -->
+  <div class="screenshot" style="position:absolute;top:920px;left:80px;width:920px;height:340px;border-radius:60px;border:none;background:#000;overflow:hidden">
+    <img class="shot-contain" src="img/capsule.png" alt="灵动岛胶囊">
+  </div>
+
+  <!-- 底部品牌 -->
+  <div style="position:absolute;bottom:60px;left:80px;right:80px;display:flex;justify-content:space-between;align-items:flex-end">
+    <div style="font-size:48px;font-weight:900;letter-spacing:2px">AI MONITOR</div>
+    <div style="font-size:32px;color:var(--gray)">macOS · Windows</div>
+  </div>
+</div>
+
+<!-- ============ Card 2 · 痛点 ============ -->
+<div class="card" id="c2">
+  <div class="blk" style="top:0;right:0;width:100%;height:120px;background:var(--pink)"></div>
+  <div class="blk" style="bottom:0;left:0;width:60%;height:140px;background:var(--yellow)"></div>
+
+  <div style="position:absolute;top:30px;left:80px;right:80px">
+    <div style="font-size:36px;font-weight:800;color:var(--bg);letter-spacing:3px">THE PAIN 😭</div>
+  </div>
+
+  <div style="position:absolute;top:180px;left:80px;right:80px">
+    <div style="font-size:110px;font-weight:900;line-height:1;color:var(--white)">
+      充值<br>
+      <span style="color:var(--yellow)">一时爽</span>
+    </div>
+    <div style="font-size:42px;font-weight:600;color:var(--gray);margin-top:16px">
+      对账 <span style="color:var(--pink)">火葬场</span>
+    </div>
+  </div>
+
+  <div style="position:absolute;top:560px;left:80px;right:80px;display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;align-items:center;gap:24px">
+      <div class="num" style="background:var(--yellow)">1</div>
+      <div style="font-size:38px;font-weight:700;line-height:1.3">不知道哪个平台<br><span style="color:var(--blue);font-size:32px;font-weight:600">在偷偷烧钱</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:24px">
+      <div class="num" style="background:var(--pink)">2</div>
+      <div style="font-size:38px;font-weight:700;line-height:1.3">余额见底才发现<br><span style="color:var(--blue);font-size:32px;font-weight:600">调用全失败</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:24px">
+      <div class="num" style="background:var(--blue)">3</div>
+      <div style="font-size:38px;font-weight:700;line-height:1.3">DeepSeek 根本没有<br><span style="color:var(--blue);font-size:32px;font-weight:600">用量查询 API</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:24px">
+      <div class="num" style="background:var(--orange)">4</div>
+      <div style="font-size:38px;font-weight:700;line-height:1.3">五家平台五套界面<br><span style="color:var(--blue);font-size:32px;font-weight:600">对账到崩溃</span></div>
+    </div>
+  </div>
+
+  <div style="position:absolute;bottom:40px;left:80px;font-size:42px;font-weight:900;color:var(--bg)">
+    直到 我做了它 →
+  </div>
+</div>
+
+<!-- ============ Card 3 · 灵动岛 ============ -->
+<div class="card" id="c3">
+  <div class="blk" style="top:-100px;left:-100px;width:300px;height:300px;background:var(--purple);border-radius:50%"></div>
+  <div class="blk" style="top:60px;right:-40px;width:80px;height:240px;background:var(--green)"></div>
+
+  <div style="position:absolute;top:80px;left:80px">
+    <span class="tag" style="background:var(--purple);color:#fff">FEATURE 01</span>
+  </div>
+
+  <div style="position:absolute;top:170px;left:80px;right:80px">
+    <div style="font-size:120px;font-weight:900;line-height:1">
+      桌面
+      <span style="color:var(--yellow)">灵动岛</span>
+    </div>
+    <div style="font-size:40px;font-weight:600;color:var(--gray);margin-top:12px">🎴 浮在桌面边边 · 扫一眼就懂</div>
+  </div>
+
+  <div class="screenshot" style="position:absolute;top:460px;left:80px;width:920px;height:460px;border-radius:24px;border:none;overflow:hidden">
+    <img class="shot-img" src="img/usage.png" alt="灵动岛展开态">
+  </div>
+
+  <div style="position:absolute;bottom:80px;left:80px;right:80px;display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;align-items:center;gap:20px">
+      <span style="font-size:44px">🖱</span>
+      <span style="font-size:38px;font-weight:700">鼠标移上 自动展开详情</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <span style="font-size:44px">✋</span>
+      <span style="font-size:38px;font-weight:700">拖到屏幕边缘 缩成半圆</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <span style="font-size:44px">📌</span>
+      <span style="font-size:38px;font-weight:700">位置记忆 下次还在那</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Card 4 · 多平台 ============ -->
+<div class="card" id="c4">
+  <div class="blk" style="bottom:-60px;right:-60px;width:320px;height:320px;background:var(--blue);border-radius:50%"></div>
+  <div class="blk" style="top:0;left:0;width:8px;height:100%;background:var(--yellow)"></div>
+
+  <div style="position:absolute;top:80px;left:80px">
+    <span class="tag" style="background:var(--blue);color:#0a0a0a">FEATURE 02</span>
+  </div>
+
+  <div style="position:absolute;top:170px;left:80px;right:80px">
+    <div style="font-size:110px;font-weight:900;line-height:1">
+      多平台<br>
+      <span style="color:var(--green)">一网打尽</span> 💰
+    </div>
+  </div>
+
+  <div style="position:absolute;top:500px;left:80px;right:80px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div style="background:#161616;border:2px solid var(--green);border-radius:20px;padding:28px">
+        <div style="font-size:36px;font-weight:800">DeepSeek</div>
+        <div style="font-size:24px;color:var(--green);margin-top:8px">✅ 余额自动</div>
+      </div>
+      <div style="background:#161616;border:2px solid var(--green);border-radius:20px;padding:28px">
+        <div style="font-size:36px;font-weight:800">Kimi 月之暗面</div>
+        <div style="font-size:24px;color:var(--green);margin-top:8px">✅ 余额自动</div>
+      </div>
+      <div style="background:#161616;border:2px solid var(--green);border-radius:20px;padding:28px">
+        <div style="font-size:36px;font-weight:800">硅基流动</div>
+        <div style="font-size:24px;color:var(--green);margin-top:8px">✅ 余额自动</div>
+      </div>
+      <div style="background:#161616;border:2px solid var(--green);border-radius:20px;padding:28px">
+        <div style="font-size:36px;font-weight:800">OpenRouter</div>
+        <div style="font-size:24px;color:var(--green);margin-top:8px">✅ 余额自动</div>
+      </div>
+      <div style="background:#161616;border:2px solid var(--orange);border-radius:20px;padding:28px">
+        <div style="font-size:36px;font-weight:800">OpenAI</div>
+        <div style="font-size:24px;color:var(--orange);margin-top:8px">⚠ 手动登记</div>
+      </div>
+      <div style="background:#161616;border:2px solid var(--orange);border-radius:20px;padding:28px">
+        <div style="font-size:36px;font-weight:800">Claude / GLM</div>
+        <div style="font-size:24px;color:var(--orange);margin-top:8px">⚠ 手动登记</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="screenshot" style="position:absolute;top:1010px;left:80px;width:920px;height:260px;border-radius:20px;border:none;overflow:hidden">
+    <img class="shot-img" src="img/settings.png" alt="账户列表">
+  </div>
+</div>
+
+<!-- ============ Card 5 · Token 统计 ============ -->
+<div class="card" id="c5">
+  <div class="blk" style="top:-60px;right:-60px;width:280px;height:280px;background:var(--orange);border-radius:0;transform:rotate(20deg)"></div>
+  <div class="blk" style="bottom:0;left:0;width:100%;height:8px;background:var(--pink)"></div>
+
+  <div style="position:absolute;top:80px;left:80px">
+    <span class="tag" style="background:var(--orange);color:#0a0a0a">FEATURE 03 · 核心</span>
+  </div>
+
+  <div style="position:absolute;top:170px;left:80px;right:80px">
+    <div style="font-size:110px;font-weight:900;line-height:1">
+      Token<br>
+      <span style="color:var(--pink)">自动统计</span> 🔢
+    </div>
+    <div style="font-size:44px;font-weight:700;color:var(--yellow);margin-top:20px">
+      改个地址就行
+    </div>
+  </div>
+
+  <!-- 代码示意 -->
+  <div style="position:absolute;top:580px;left:80px;right:80px;background:#0d0d0d;border:2px solid var(--green);border-radius:20px;padding:40px">
+    <div style="font-size:22px;color:var(--gray);margin-bottom:16px">// 改这一行就行 👇</div>
+    <div style="font-family:'SF Mono',Menlo,monospace;font-size:32px;line-height:1.7">
+      <span style="color:var(--purple)">client</span> = <span style="color:var(--blue)">OpenAI</span>(<br>
+      &nbsp;&nbsp;api_key=<span style="color:var(--green)">"sk-你的key"</span>,<br>
+      &nbsp;&nbsp;base_url=<span style="color:var(--yellow)">"http://127.0.0.1:8899/v1"</span> <span style="color:var(--gray)">←</span><br>
+      )
+    </div>
+    <div style="font-size:24px;color:var(--gray);margin-top:16px">Key 不变 · 只改 Base URL · 自动记账</div>
+  </div>
+
+  <div style="position:absolute;top:960px;left:80px;right:80px;display:flex;gap:20px">
+    <div style="flex:1;background:#161616;border-radius:16px;padding:24px;text-align:center">
+      <div style="font-size:56px;font-weight:900;color:var(--blue)">OpenAI</div>
+      <div style="font-size:24px;color:var(--gray);margin-top:8px">格式 ✅</div>
+    </div>
+    <div style="flex:1;background:#161616;border-radius:16px;padding:24px;text-align:center">
+      <div style="font-size:56px;font-weight:900;color:var(--purple)">Anthropic</div>
+      <div style="font-size:24px;color:var(--gray);margin-top:8px">格式 ✅</div>
+    </div>
+  </div>
+
+  <div style="position:absolute;bottom:120px;left:80px;right:80px;font-size:34px;font-weight:600;color:var(--gray);text-align:center;line-height:1.4">
+    DeepSeek 没有用量 API？<br>
+    <span style="color:var(--white);font-weight:800">本地代理 自动解析每次响应的 usage</span>
+  </div>
+</div>
+
+<!-- ============ Card 6 · 趋势图 ============ -->
+<div class="card" id="c6">
+  <div class="blk" style="top:0;right:0;width:240px;height:240px;background:var(--green);border-radius:50%"></div>
+  <div class="blk" style="bottom:60px;left:-40px;width:160px;height:160px;background:var(--purple);border-radius:50%"></div>
+
+  <div style="position:absolute;top:80px;left:80px">
+    <span class="tag" style="background:var(--green);color:#0a0a0a">FEATURE 04</span>
+  </div>
+
+  <div style="position:absolute;top:170px;left:80px;right:80px">
+    <div style="font-size:110px;font-weight:900;line-height:1">
+      30天<br>
+      <span style="color:var(--blue)">一眼暴增</span> 📊
+    </div>
+    <div style="font-size:40px;font-weight:600;color:var(--gray);margin-top:12px">余额趋势 + token 消耗 · 同一条时间轴</div>
+  </div>
+
+  <div class="screenshot" style="position:absolute;top:520px;left:80px;width:920px;height:560px;border-radius:24px;border:none;overflow:hidden">
+    <img class="shot-img" src="img/trend.png" alt="趋势图">
+  </div>
+
+  <div style="position:absolute;bottom:100px;left:80px;right:80px;display:flex;justify-content:space-around;text-align:center">
+    <div>
+      <div style="font-size:64px;font-weight:900;color:var(--yellow)">1d</div>
+      <div style="font-size:24px;color:var(--gray)">当天</div>
+    </div>
+    <div>
+      <div style="font-size:64px;font-weight:900;color:var(--orange)">7d</div>
+      <div style="font-size:24px;color:var(--gray)">一周</div>
+    </div>
+    <div>
+      <div style="font-size:64px;font-weight:900;color:var(--pink)">30d</div>
+      <div style="font-size:24px;color:var(--gray)">一月</div>
+    </div>
+    <div>
+      <div style="font-size:64px;font-weight:900;color:var(--blue)">自定义</div>
+      <div style="font-size:24px;color:var(--gray)">滚轮缩放</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Card 7 · 余额告警 ============ -->
+<div class="card" id="c7">
+  <div class="blk" style="top:0;left:0;width:100%;height:100px;background:var(--pink)"></div>
+  <div class="blk" style="bottom:-80px;right:-80px;width:300px;height:300px;background:var(--orange);transform:rotate(-10deg)"></div>
+
+  <div style="position:absolute;top:24px;left:80px;font-size:36px;font-weight:800;color:#0a0a0a;letter-spacing:2px">🚨 ALERTS</div>
+
+  <div style="position:absolute;top:180px;left:80px;right:80px">
+    <div style="font-size:120px;font-weight:900;line-height:1">
+      余额<br>
+      <span style="color:var(--orange)">告警</span>
+    </div>
+    <div style="font-size:40px;font-weight:600;color:var(--gray);margin-top:12px">再也不用 调用到一半 才发现余额耗尽</div>
+  </div>
+
+  <div class="screenshot" style="position:absolute;top:600px;left:80px;width:920px;height:280px;border-radius:20px;border:none;overflow:hidden">
+    <img class="shot-img" src="img/alert.png" alt="告警设置">
+  </div>
+
+  <div style="position:absolute;bottom:100px;left:80px;right:80px">
+    <div style="font-size:32px;font-weight:700;color:var(--gray);margin-bottom:20px">推送渠道：</div>
+    <div style="display:flex;flex-wrap:wrap;gap:16px">
+      <span class="tag" style="background:var(--green);color:#0a0a0a">🔔 系统通知</span>
+      <span class="tag" style="background:var(--blue);color:#0a0a0a">💬 飞书</span>
+      <span class="tag" style="background:var(--blue);color:#0a0a0a">💬 钉钉</span>
+      <span class="tag" style="background:var(--purple);color:#fff">📱 Bark</span>
+      <span class="tag" style="background:var(--yellow);color:#0a0a0a">📨 Server酱</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Card 8 · 技术亮点 ============ -->
+<div class="card" id="c8">
+  <div class="blk" style="top:-40px;left:-40px;width:200px;height:200px;background:var(--yellow);border-radius:50%"></div>
+  <div class="blk" style="bottom:0;right:0;width:50%;height:6px;background:var(--blue)"></div>
+
+  <div style="position:absolute;top:80px;left:80px">
+    <span class="tag" style="background:var(--yellow);color:#0a0a0a">WHY · 为什么选它</span>
+  </div>
+
+  <div style="position:absolute;top:170px;left:80px;right:80px">
+    <div style="font-size:100px;font-weight:900;line-height:1">
+      轻到<br>
+      <span style="color:var(--yellow)">不像话</span> 🛠
+    </div>
+  </div>
+
+  <div style="position:absolute;top:440px;left:80px;right:80px;display:grid;grid-template-columns:1fr 1fr;gap:24px">
+    <div style="background:#161616;border-radius:24px;padding:36px;text-align:center">
+      <div style="font-size:80px;font-weight:900;color:var(--green)">6MB</div>
+      <div style="font-size:28px;color:var(--gray);margin-top:8px">安装包大小</div>
+    </div>
+    <div style="background:#161616;border-radius:24px;padding:36px;text-align:center">
+      <div style="font-size:80px;font-weight:900;color:var(--blue)">100MB</div>
+      <div style="font-size:28px;color:var(--gray);margin-top:8px">内存占用</div>
+    </div>
+    <div style="background:#161616;border-radius:24px;padding:36px;text-align:center">
+      <div style="font-size:80px;font-weight:900;color:var(--pink)">MIT</div>
+      <div style="font-size:28px;color:var(--gray);margin-top:8px">开源协议</div>
+    </div>
+    <div style="background:#161616;border-radius:24px;padding:36px;text-align:center">
+      <div style="font-size:80px;font-weight:900;color:var(--orange)">100%</div>
+      <div style="font-size:28px;color:var(--gray);margin-top:8px">数据本地</div>
+    </div>
+  </div>
+
+  <div style="position:absolute;bottom:120px;left:80px;right:80px;background:#0d0d0d;border:2px solid var(--green);border-radius:20px;padding:32px">
+    <div style="font-size:36px;font-weight:800;color:var(--green);margin-bottom:12px">🔒 隐私保证</div>
+    <div style="font-size:28px;color:var(--white);line-height:1.5">
+      API Key 加密存系统钥匙串<br>
+      所有数据 100% 本地 SQLite<br>
+      不上传任何服务器 · 不联网回传
+    </div>
+  </div>
+
+  <div style="position:absolute;bottom:40px;left:80px;font-size:28px;color:var(--gray)">
+    Tauri 2 + Vue 3 · macOS / Windows 双平台
+  </div>
+</div>
+
+<!-- ============ Card 9 · 结尾引导 ============ -->
+<div class="card" id="c9">
+  <div class="blk" style="top:0;left:0;width:100%;height:200px;background:var(--yellow)"></div>
+  <div class="blk" style="top:120px;right:80px;width:120px;height:120px;background:var(--pink);border-radius:50%"></div>
+  <div class="blk" style="bottom:-100px;left:-100px;width:400px;height:400px;background:var(--blue);border-radius:50%"></div>
+
+  <div style="position:absolute;top:40px;left:80px;right:80px;text-align:center">
+    <div style="font-size:44px;font-weight:900;color:#0a0a0a;letter-spacing:2px">📦 开源 MIT · 完全免费</div>
+  </div>
+
+  <div style="position:absolute;top:260px;left:80px;right:80px;text-align:center">
+    <div style="font-size:130px;font-weight:900;line-height:1;color:var(--white)">
+      评论区<br>
+      <span style="color:var(--yellow)">扣 1</span>
+    </div>
+    <div style="font-size:40px;font-weight:600;color:var(--gray);margin-top:20px">我发你安装包链接 👇</div>
+  </div>
+
+  <!-- 二维码占位 -->
+  <div style="position:absolute;top:680px;left:50%;transform:translateX(-50%);width:340px;height:340px;background:#fff;border-radius:24px;display:flex;align-items:center;justify-content:center;color:#888;font-size:24px;font-weight:700;text-align:center">
+    <div>
+      🔲 二维码占位<br>
+      <small style="font-size:18px;font-weight:400">（GitHub 仓库二维码）</small>
+    </div>
+  </div>
+
+  <div style="position:absolute;bottom:200px;left:80px;right:80px;text-align:center">
+    <div style="font-size:40px;font-weight:800;color:var(--white)">GitHub: WinterOne-hub/ai-monitor</div>
+    <div style="font-size:28px;color:var(--gray);margin-top:12px">
+      ⭐ Star 支持 · 🐛 Issue 反馈 · 🤝 PR 欢迎
+    </div>
+  </div>
+
+  <div style="position:absolute;bottom:60px;left:80px;right:80px;text-align:center">
+    <div style="font-size:36px;font-weight:800;color:var(--yellow)"> MADE WITH  ❤  </div>
+  </div>
+</div>
+
+</body>
+</html>

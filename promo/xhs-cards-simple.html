@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>AI Monitor · 小红书配图（简洁版）</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:#e8e8e8;
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  display:flex;flex-direction:column;align-items:center;gap:28px;padding:40px;
+}
+.tip{
+  color:#666;font-size:14px;text-align:center;line-height:1.6;max-width:1080px;
+}
+.card{
+  width:1080px;height:1440px;background:#ffffff;
+  position:relative;overflow:hidden;color:#111;flex-shrink:0;
+  display:flex;flex-direction:column;
+  padding:100px 80px 80px;
+}
+/* 顶部分组小字 */
+.kicker{
+  font-size:30px;font-weight:600;color:#9a9a9a;letter-spacing:2px;
+}
+/* 大标题 */
+.title{
+  font-size:76px;font-weight:800;line-height:1.15;margin-top:16px;color:#111;
+}
+.title em{font-style:normal;color:#007AFF}
+/* 副标题 / 段落 */
+.body{
+  font-size:36px;font-weight:400;line-height:1.6;color:#333;margin-top:28px;
+}
+.body b{color:#111}
+/* 截图容器 */
+.shot{
+  width:100%;flex:1;min-height:0;margin-top:40px;
+  background:#f5f5f5;border-radius:20px;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+}
+.shot img{max-width:100%;max-height:100%;object-fit:contain}
+/* 底部标签 */
+.footer-tag{
+  margin-top:36px;font-size:28px;color:#9a9a9a;font-weight:500;
+}
+/* 页码小圆点 */
+.page-dots{
+  position:absolute;bottom:56px;left:80px;right:80px;
+  display:flex;justify-content:center;gap:10px;
+}
+.page-dots span{width:12px;height:12px;border-radius:50%;background:#ddd}
+.page-dots span.on{background:#007AFF}
+/* 小卡片引用 */
+.quote{
+  margin-top:36px;background:#f5f5f5;border-radius:16px;padding:28px 32px;
+  font-size:32px;line-height:1.6;color:#333;
+}
+</style>
+</head>
+<body>
+
+<div class="tip">
+📐 每张卡片 1080×1440（3:4 竖版）｜简洁白底风<br>
+导出：Chrome F12 → Cmd+Shift+P → "Capture node screenshot" → 点选卡片
+</div>
+
+<!-- ============ Card 1 · 封面 ============ -->
+<div class="card">
+  <div class="kicker">AI 工具人自用分享</div>
+  <div class="title">桌面边边<br>住了个 <em>小胶囊</em></div>
+  <div class="body">
+    不用打开网页<br>
+    扫一眼就知道 <b>余额还剩多少</b>
+  </div>
+  <div class="shot" style="background:#fff;border:1px solid #eee">
+    <img src="img/capsule.png">
+  </div>
+  <div class="footer-tag">#AI #DeepSeek #程序员日常</div>
+  <div class="page-dots"><span class="on"></span><span></span><span></span><span></span><span></span><span></span></div>
+</div>
+
+<!-- ============ Card 2 · 是什么 ============ -->
+<div class="card">
+  <div class="kicker">先说这是啥</div>
+  <div class="title">一个免费开源的<br><em>API 余额监控</em></div>
+  <div class="body">
+    同时用 DeepSeek、Kimi、硅基流动、OpenRouter<br>
+    的应该懂——<br><br>
+    <b>每次充值都是一笔糊涂账</b>
+  </div>
+  <div class="shot">
+    <img src="img/usage.png">
+  </div>
+  <div class="footer-tag">多平台余额 + 用量 一个面板看完</div>
+  <div class="page-dots"><span></span><span class="on"></span><span></span><span></span><span></span><span></span></div>
+</div>
+
+<!-- ============ Card 3 · 余额 ============ -->
+<div class="card">
+  <div class="kicker">最常用的功能</div>
+  <div class="title">余额 <em>一眼看全</em></div>
+  <div class="body">
+    DeepSeek、Kimi、硅基流动、OpenRouter<br>
+    官方接口自动拉余额<br><br>
+    OpenAI、Claude 没有余额 API 的<br>
+    手动登记一下就行
+  </div>
+  <div class="shot">
+    <img src="img/settings.png">
+  </div>
+  <div class="footer-tag">不用一个个登录网页查了</div>
+  <div class="page-dots"><span></span><span></span><span class="on"></span><span></span><span></span><span></span></div>
+</div>
+
+<!-- ============ Card 4 · 用量统计 ============ -->
+<div class="card">
+  <div class="kicker">最惊喜的功能</div>
+  <div class="title">Token 用量<br><em>自动记账</em></div>
+  <div class="body">
+    内置本地代理<br>
+    把 API 地址改成 <b>127.0.0.1:8899</b><br><br>
+    每次调用自动统计 token 和花费<br>
+    <b>Key 都不用换</b>
+  </div>
+  <div class="shot">
+    <img src="img/trend.png">
+  </div>
+  <div class="footer-tag">改个地址，剩下的交给它</div>
+  <div class="page-dots"><span></span><span></span><span></span><span class="on"></span><span></span><span></span></div>
+</div>
+
+<!-- ============ Card 5 · 趋势图 ============ -->
+<div class="card">
+  <div class="kicker">用得最多的图表</div>
+  <div class="title">30 天趋势<br>哪天花多了 <em>一眼看出</em></div>
+  <div class="body">
+    余额和 token 画在一条时间轴上<br>
+    滚轮就能缩放<br><br>
+    突然用量暴涨？<br>
+    翻回去就能找到那天干了啥
+  </div>
+  <div class="shot">
+    <img src="img/trend.png">
+  </div>
+  <div class="footer-tag">1天 / 7天 / 30天 / 自定义</div>
+  <div class="page-dots"><span></span><span></span><span></span><span></span><span class="on"></span><span></span></div>
+</div>
+
+<!-- ============ Card 6 · 结尾 ============ -->
+<div class="card">
+  <div class="kicker">最后</div>
+  <div class="title">6MB 安装包<br>MIT 开源 <em>完全免费</em></div>
+  <div class="body">
+    macOS / Windows 都能用<br>
+    API Key 加密存本地<br>
+    数据不出本机<br><br>
+    <b>GitHub: WinterOne-hub/ai-monitor</b>
+  </div>
+  <div class="shot" style="background:#fff;border:1px solid #eee">
+    <img src="img/capsule.png">
+  </div>
+  <div class="footer-tag">需要安装包的评论区说一声 👇</div>
+  <div class="page-dots"><span></span><span></span><span></span><span></span><span></span><span class="on"></span></div>
+</div>
+
+</body>
+</html>

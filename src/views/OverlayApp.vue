@@ -1,22 +1,26 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow, currentMonitor, cursorPosition } from "@tauri-apps/api/window";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+import { getSetting, setSetting } from "../core/db";
 import {
-  initDb,
-  listAccounts,
-  latestBalances,
-  todayUsageTotal,
-  todayUsageByAccount,
-  accountTotalEstimatedCost,
-  getSetting,
-  setSetting,
-  type AccountRow,
-} from "../core/db";
-import { collectAll, startAutoCollect, EVENT_BALANCE_UPDATED } from "../core/collector";
+  ensureData,
+  loadData as storeLoadData,
+  refreshAll as storeRefreshAll,
+  accounts,
+  balances,
+  today,
+  todayByAccount,
+  collecting,
+  totalBalance,
+  lastErrors,
+  fmt,
+  displayCost,
+} from "../core/dashboardStore";
+import { startAutoCollect, EVENT_BALANCE_UPDATED } from "../core/collector";
 import { i18n } from "../i18n";
 
 const win = getCurrentWindow();
@@ -33,20 +37,10 @@ const TOP_Y = 48; // 顶部居中的 Y
 
 type Mode = "capsule" | "expanded" | "edge";
 
-const accounts = ref<AccountRow[]>([]);
-const balances = ref<Record<number, { balance: number; currency: string }>>({});
-const today = ref<{ input_tokens: number; output_tokens: number; cost: number; cost_estimated: number }>({
-  input_tokens: 0,
-  output_tokens: 0,
-  cost: 0,
-  cost_estimated: 0,
-});
-const todayByAccount = ref<
-  Record<number, { input_tokens: number; output_tokens: number; cost: number; cost_estimated: number }>
->({});
-const collecting = ref(false);
 const lastUpdated = ref("");
 const lowThreshold = ref(20);
+
+const lowBalance = computed(() => totalBalance.value <= lowThreshold.value);
 
 // 状态
 const mode = ref<Mode>("capsule");
@@ -64,17 +58,6 @@ let cursorTimer: ReturnType<typeof setInterval> | null = null;
 let hoverTimer: number | null = null;
 let dragging = false; // 正在拖动：抑制 hover 展开（让胶囊可拖）
 
-const totalBalance = computed(() =>
-  Object.values(balances.value).reduce((s, b) => s + b.balance, 0)
-);
-
-function fmt(n: number): string {
-  return n.toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
 function compactTok(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
   if (n >= 1000) return (n / 1000).toFixed(1) + "K";
@@ -91,11 +74,6 @@ function statusColor(balance: number): string {
   if (balance <= lowThreshold.value) return "#f87171";
   if (balance <= lowThreshold.value * 3) return "#fbbf24";
   return "#34d399";
-}
-
-/** 显示消耗金额：余额差值有效用差值（准确），否则回退 token×单价估算 */
-function displayCost(cost: number, costEstimated: number): number {
-  return cost > 0.0001 ? cost : costEstimated;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -128,11 +106,17 @@ async function getLogicalMetrics(): Promise<{
   };
 }
 
+/** 当前显示器对应的位置存储键（多显示器分别记忆，名字缺失时退回默认） */
+async function posSettingKey(): Promise<string> {
+  const mon = await currentMonitor();
+  return `overlay_pos_${mon?.name ?? "default"}`;
+}
+
 async function savePos(): Promise<void> {
   const m = await getLogicalMetrics();
   const x = Math.max(0, Math.min(m.x, Math.max(0, m.screenW - m.w)));
   const y = Math.max(0, Math.min(m.y, Math.max(0, m.screenH - m.h)));
-  await setSetting("overlay_pos", JSON.stringify({ x, y }));
+  await setSetting(await posSettingKey(), JSON.stringify({ x, y }));
   await setSetting("overlay_mode", mode.value);
 }
 
@@ -273,14 +257,7 @@ function onEdgeClick(): void {
 // ---------- 数据 ----------
 
 async function refresh(): Promise<void> {
-  if (collecting.value) return;
-  collecting.value = true;
-  try {
-    await collectAll();
-  } catch (e) {
-    console.error(e);
-  }
-  collecting.value = false;
+  await storeRefreshAll();
   await loadData();
 }
 
@@ -292,43 +269,15 @@ async function maybeRefreshOnUsage(): Promise<void> {
     if (Date.now() - lastTs > 5 * 60 * 1000) {
       await refresh();
     } else {
-      await loadData();
+      await storeLoadData();
     }
   } catch {
-    await loadData();
+    await storeLoadData();
   }
 }
 
 async function loadData(): Promise<void> {
-  accounts.value = await listAccounts();
-  const lbs = await latestBalances();
-  const map: Record<number, { balance: number; currency: string }> = {};
-  for (const lb of lbs) {
-    map[lb.account_id] = { balance: lb.balance, currency: lb.currency };
-  }
-  // 聚合平台余额推算：充值余额 - 累计估算消耗（硅基流动 API 余额不实时）
-  for (const acc of accounts.value) {
-    if (acc.provider_id === "siliconflow") {
-      const cur = map[acc.id];
-      if (cur) {
-        const est = await accountTotalEstimatedCost(acc.id);
-        cur.balance = Math.max(0, cur.balance - est);
-      }
-    }
-  }
-  balances.value = map;
-  today.value = await todayUsageTotal();
-  const byAcc = await todayUsageByAccount();
-  const accMap: Record<number, { input_tokens: number; output_tokens: number; cost: number; cost_estimated: number }> = {};
-  for (const u of byAcc) {
-    accMap[u.account_id] = {
-      input_tokens: u.input_tokens,
-      output_tokens: u.output_tokens,
-      cost: u.cost,
-      cost_estimated: u.cost_estimated,
-    };
-  }
-  todayByAccount.value = accMap;
+  await storeLoadData();
   const t = await getSetting("last_collect_at");
   lastUpdated.value = t
     ? new Date(t).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
@@ -345,12 +294,13 @@ function hideOverlay(): void {
 }
 
 onMounted(async () => {
-  await initDb();
+  await ensureData();
   await loadData();
 
   // 恢复位置与模式
   try {
-    const posRaw = await getSetting("overlay_pos");
+    const posRaw =
+      (await getSetting(await posSettingKey())) ?? (await getSetting("overlay_pos"));
     if (posRaw) {
       const m = await getLogicalMetrics();
       const { x, y } = JSON.parse(posRaw) as { x: number; y: number };
@@ -439,6 +389,14 @@ onMounted(async () => {
   window.addEventListener("mousedown", onDown);
   window.addEventListener("mouseup", onUp);
 
+  // Esc 收起展开态（回胶囊）；边缘态弹回胶囊
+  const onKeydown = (e: KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    if (mode.value === "expanded") void collapseToCapsule();
+    else if (mode.value === "edge") void expandFromEdge();
+  };
+  window.addEventListener("keydown", onKeydown);
+
   void refresh();
 });
 
@@ -459,13 +417,13 @@ onUnmounted(() => {
   <div
     v-show="mode === 'edge'"
     class="island edge"
-    :class="edgeSide === 'right' ? 'edge-right' : 'edge-left'"
+    :class="[edgeSide === 'right' ? 'edge-right' : 'edge-left', { low: lowBalance }]"
+    :title="t('overlay.expandHint')"
     @mouseenter="onHoverEnter"
     @mouseleave="onHoverLeave"
     @click="onEdgeClick"
-    :title="t('overlay.expandHint')"
   >
-    <span class="dot" :class="{ online: !collecting }"></span>
+    <span class="dot" :class="{ online: !collecting, error: lastErrors.length > 0 }"></span>
     <span class="c-title">AI</span>
   </div>
 
@@ -473,20 +431,30 @@ onUnmounted(() => {
   <div
     v-show="mode !== 'edge'"
     class="island main"
+    :class="{ low: lowBalance }"
     @mouseenter="onHoverEnter"
     @mouseleave="onHoverLeave"
   >
     <!-- 顶部行（胶囊内容 / 展开 header） -->
     <div class="cap-row" data-tauri-drag-region @click="onCapsuleClick">
-      <span class="dot" :class="{ online: !collecting }"></span>
+      <span class="dot" :class="{ online: !collecting, error: lastErrors.length > 0 }"></span>
       <span class="brand">{{ t("overlay.brand") }}</span>
       <span class="divider"></span>
-      <span class="bal" :style="{ color: statusColor(totalBalance) }">¥{{ fmt(totalBalance) }}</span>
+      <span class="bal" :style="{ color: statusColor(totalBalance) }"
+        >¥{{ fmt(totalBalance) }}</span
+      >
       <span class="spend">-¥{{ fmt(displayCost(today.cost, today.cost_estimated)) }}</span>
       <span class="tok">{{ compactTok(today.input_tokens + today.output_tokens) }} tok</span>
       <span v-if="mode === 'capsule'" class="chevron">›</span>
       <div v-else class="head-actions">
-        <button class="icon-btn" :title="t('overlay.refresh')" :disabled="collecting" @click.stop="refresh">⟳</button>
+        <button
+          class="icon-btn"
+          :title="t('overlay.refresh')"
+          :disabled="collecting"
+          @click.stop="refresh"
+        >
+          ⟳
+        </button>
         <button class="icon-btn" :title="t('overlay.panel')" @click.stop="openDashboard">⤢</button>
         <button class="icon-btn" :title="t('overlay.hide')" @click.stop="hideOverlay">—</button>
       </div>
@@ -505,9 +473,23 @@ onUnmounted(() => {
             <span class="m-bal" :style="{ color: statusColor(balances[acc.id]?.balance ?? 0) }">
               {{ balances[acc.id] ? fmt(balances[acc.id].balance) : "--" }}
             </span>
-            <span class="m-cost">-¥{{ fmt(displayCost(todayByAccount[acc.id]?.cost ?? 0, todayByAccount[acc.id]?.cost_estimated ?? 0)) }}</span>
+            <span class="m-cost"
+              >-¥{{
+                fmt(
+                  displayCost(
+                    todayByAccount[acc.id]?.cost ?? 0,
+                    todayByAccount[acc.id]?.cost_estimated ?? 0
+                  )
+                )
+              }}</span
+            >
             <span class="m-tok">
-              {{ compactTok((todayByAccount[acc.id]?.input_tokens ?? 0) + (todayByAccount[acc.id]?.output_tokens ?? 0)) }}
+              {{
+                compactTok(
+                  (todayByAccount[acc.id]?.input_tokens ?? 0) +
+                    (todayByAccount[acc.id]?.output_tokens ?? 0)
+                )
+              }}
               tok
             </span>
           </div>
@@ -515,9 +497,16 @@ onUnmounted(() => {
       </div>
       <div class="drawer-footer">
         <span class="date">{{ todayLabel() }}</span>
-        <span class="tokens">{{ t("overlay.today", { in: compactTok(today.input_tokens), out: compactTok(today.output_tokens) }) }}</span>
+        <span class="tokens">{{
+          t("overlay.today", {
+            in: compactTok(today.input_tokens),
+            out: compactTok(today.output_tokens),
+          })
+        }}</span>
         <span class="cost">¥{{ fmt(displayCost(today.cost, today.cost_estimated)) }}</span>
-        <span class="time">{{ lastUpdated ? t("overlay.update", { time: lastUpdated }) : "" }}</span>
+        <span class="time">{{
+          lastUpdated ? t("overlay.update", { time: lastUpdated }) : ""
+        }}</span>
       </div>
     </div>
   </div>
@@ -525,11 +514,30 @@ onUnmounted(() => {
 
 <style scoped>
 .island {
-  background: rgba(18, 20, 28, 0.96);
+  background: var(--island-bg);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #e5e7eb;
   user-select: none;
   overflow: hidden;
+}
+
+/* 低余额：整卡红光呼吸提醒 */
+.island.low {
+  animation: low-pulse 2.2s ease-in-out infinite;
+}
+.island.low .dot {
+  background: #f87171;
+}
+@keyframes low-pulse {
+  0%,
+  100% {
+    border-color: rgba(248, 113, 113, 0.35);
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.35);
+  }
+  50% {
+    border-color: rgba(248, 113, 113, 0.85);
+    box-shadow: 0 0 18px 4px rgba(248, 113, 113, 0.45);
+  }
 }
 
 /* ---- 主体（胶囊/展开共用容器） ---- */
@@ -562,6 +570,9 @@ onUnmounted(() => {
 }
 .dot.online {
   background: #34d399;
+}
+.dot.error {
+  background: #f87171;
 }
 
 .brand {

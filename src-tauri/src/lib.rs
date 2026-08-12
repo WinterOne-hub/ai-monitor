@@ -19,6 +19,8 @@ pub fn run() {
             Some(vec!["--hidden"]),
         ))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             tray::create_tray(app)?;
 
@@ -68,9 +70,13 @@ pub fn run() {
             commands::save_secret,
             commands::get_secret,
             commands::delete_secret,
+            commands::set_proxy_secret,
+            commands::set_tray_status,
             commands::show_window,
             commands::hide_window,
             commands::toggle_window,
+            commands::set_tray_status,
+            commands::export_usage_csv,
             commands::http_get_json,
             commands::http_post_json,
             commands::http_get_text,

@@ -5,12 +5,13 @@ import {
   saveBalanceSnapshot,
   getSetting,
   setSetting,
+  deleteAccount,
+  getDb,
   type AccountRow,
   type BalanceInfo,
 } from "./db";
 import { getProvider } from "../providers";
 import { checkAlerts } from "./alert";
-import { getDb } from "./db";
 import { syncPricesIfNeeded } from "./platformSync";
 
 /**
@@ -21,12 +22,23 @@ import { syncPricesIfNeeded } from "./platformSync";
 export async function syncCostFromBalance(): Promise<void> {
   try {
     const d = getDb();
-    // 每天每条余额快照（含日期）
-    const rows = await d.select<{ account_id: number; balance: number; fetched_at: string; day: string }[]>(
+    // 每天每条余额快照（含日期）；只扫近 45 天，避免全表读入 JS
+    const rows = await d.select<
+      { account_id: number; balance: number; fetched_at: string; day: string }[]
+    >(
       `SELECT account_id, balance, fetched_at, substr(fetched_at, 1, 10) AS day
        FROM balance_snapshots
+       WHERE fetched_at >= datetime('now', 'localtime', '-45 days')
        ORDER BY account_id, fetched_at ASC`
     );
+    // 代理已逐笔记账（source='proxy' 带权威 cost）的日期不可被余额差值覆盖
+    const proxyDays = await d.select<{ account_id: number; date: string }[]>(
+      `SELECT DISTINCT account_id, date FROM daily_usage
+       WHERE source = 'proxy' AND cost > 0.0001
+         AND date >= date('now', 'localtime', '-45 days')`
+    );
+    const proxySet = new Set(proxyDays.map((p) => `${p.account_id}|${p.date}`));
+
     // 按账户+天分组，取首末
     const byAcc: Record<number, { day: string; first: number; last: number }[]> = {};
     for (const r of rows) {
@@ -41,6 +53,8 @@ export async function syncCostFromBalance(): Promise<void> {
     for (const [accIdStr, days] of Object.entries(byAcc)) {
       const accId = Number(accIdStr);
       for (const dayInfo of days) {
+        // 该日已有代理记账的真实消耗，保留代理值
+        if (proxySet.has(`${accId}|${dayInfo.day}`)) continue;
         const diff = dayInfo.first - dayInfo.last; // 正 = 消耗
         if (diff > 0.0001) {
           await d.execute(
@@ -109,18 +123,27 @@ export async function collectAll(): Promise<{ ok: number; failed: number; errors
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
-/** 启动定时采集（应在常驻的 overlay 窗口调用） */
+/**
+ * 启动定时采集。
+ * 面板窗口与悬浮窗都会调用，但二者共享同一 SQLite 里的 last_collect_at，
+ * 因此用「距上次采集是否超过间隔」做去重：先触发者写回时间戳，另一个窗口跳过本轮，
+ * 保证任意窗口常驻时都会按时采集（全局单例采集）。
+ */
 export function startAutoCollect(): void {
   if (timer) return;
   const run = async () => {
     try {
+      const intervalMs = (await getCollectIntervalMinutes()) * 60 * 1000;
+      const lastStr = await getSetting("last_collect_at");
+      const lastTs = lastStr ? new Date(lastStr).getTime() : 0;
+      if (Date.now() - lastTs < intervalMs - 10_000) return; // 已由另一窗口/实例采集
       await collectAll();
     } catch (e) {
       console.error("自动采集失败", e);
     }
   };
   void run();
-  timer = setInterval(run, 10 * 60 * 1000); // 默认 10 分钟
+  timer = setInterval(run, 30 * 60 * 1000); // 默认 30 分钟
 }
 
 /** 读取并调整采集间隔（分钟），返回当前生效间隔 */
@@ -137,12 +160,11 @@ export async function setCollectIntervalMinutes(minutes: number): Promise<number
 
 export async function getCollectIntervalMinutes(): Promise<number> {
   const v = await getSetting("collect_interval_minutes");
-  return v ? parseInt(v, 10) : 10;
+  return v ? parseInt(v, 10) : 30;
 }
 
 /** 删除账户时同时清理系统钥匙串中的密钥 */
 export async function deleteAccountAndSecret(accountId: number): Promise<void> {
-  const { deleteAccount } = await import("./db");
   try {
     await invoke("delete_secret", { account: String(accountId) });
   } catch {

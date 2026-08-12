@@ -100,6 +100,41 @@ pub fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// 设置代理密钥（x-proxy-secret），运行时热更新，无需重启
+#[tauri::command]
+pub async fn set_proxy_secret(app: tauri::AppHandle, secret: String) -> Result<(), String> {
+    crate::proxy::set_proxy_secret(&app, secret).await
+}
+
+/// 更新托盘标题：总余额与今日花费
+#[tauri::command]
+pub fn set_tray_status(app: tauri::AppHandle, total: String, today: String) {
+    crate::tray::update_tray_status(&app, total, today);
+}
+
+/// 把 CSV 内容写入用户「下载」目录（用于导出用量账单），返回完整路径
+#[tauri::command]
+pub fn export_usage_csv(csv: String) -> Result<String, String> {
+    let dir = std::env::var("HOME")
+        .map(|h| std::path::PathBuf::from(h).join("Downloads"))
+        .unwrap_or_else(|_| std::env::temp_dir());
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建目录失败: {e}"))?;
+    let name = format!("ai-monitor-usage-{}.csv", chrono_now_u32());
+    let path = dir.join(name);
+    std::fs::write(&path, csv).map_err(|e| format!("写入文件失败: {e}"))?;
+    Ok(path.display().to_string())
+}
+
+/// 生成时间戳文件名（HHMMSS）
+fn chrono_now_u32() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("{secs:x}")
+}
+
 /// 通过 Rust 侧发起 HTTP POST 请求（用于 Webhook 通知）
 #[tauri::command]
 pub async fn http_post_json(

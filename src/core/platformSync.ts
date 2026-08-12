@@ -22,7 +22,9 @@ export async function syncSiliconflowPrices(): Promise<number> {
   const html = await invoke<string>("http_get_text", { url: SILICONFLOW_PRICE_URL });
 
   // 提取 Next.js RSC chunks 并解码合并
-  const chunks = [...html.matchAll(/self\.__next_f\.push\(\[1,"((?:\\.|[^"])*)"\]\)/g)].map((m) => m[1]);
+  const chunks = [...html.matchAll(/self\.__next_f\.push\(\[1,"((?:\\.|[^"])*)"\]\)/g)].map(
+    (m) => m[1]
+  );
   const full = chunks.map(decodeChunk).join("");
 
   // 解析模型价格对象（modelName -> inputPrice -> outputPrice，desc 可能很长）
@@ -44,7 +46,9 @@ export async function syncSiliconflowPrices(): Promise<number> {
 }
 
 /** 检查并同步（节流：默认每 24 小时一次），返回本次是否同步及数量 */
-export async function syncPricesIfNeeded(force = false): Promise<{ synced: boolean; count: number }> {
+export async function syncPricesIfNeeded(
+  force = false
+): Promise<{ synced: boolean; count: number }> {
   try {
     const lastRaw = await getSetting("last_price_sync");
     const lastTs = lastRaw ? new Date(lastRaw).getTime() : 0;

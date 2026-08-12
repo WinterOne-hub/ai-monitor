@@ -11,7 +11,12 @@ const COOLDOWN_MS = 6 * 60 * 60 * 1000; // 告警冷却 6 小时
  */
 export async function checkAlerts(): Promise<void> {
   try {
-    const threshold = parseFloat((await getSetting("alert_balance_threshold")) ?? "20");
+    // 单一阈值来源 low_balance_threshold；兼容旧 key alert_balance_threshold
+    const threshold = parseFloat(
+      (await getSetting("low_balance_threshold")) ??
+        (await getSetting("alert_balance_threshold")) ??
+        "20"
+    );
     if (Number.isNaN(threshold)) return;
 
     const accounts = await listAccounts();
