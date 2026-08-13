@@ -20,3 +20,7 @@
   - 修复：修改采集间隔与调度中可能产生双定时器的竞态
 
 Made with [Proma](https://proma.cool) · [GitHub](https://github.com/proma-ai/Proma)
+
+### 💰 Balance & spend now stay in sync / 余额与消费同步
+- Cost uses real balance diff (authoritative), not token estimate; partial-drop sum resets on top-up
+  - 修复：今日消费改为以余额差值（真实扣费）为准，不再被 token 估算卡住；逐段下降求和，中途充值不抹掉历史消耗

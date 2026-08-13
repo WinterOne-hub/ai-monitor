@@ -31,39 +31,40 @@ export async function syncCostFromBalance(): Promise<void> {
        WHERE fetched_at >= datetime('now', 'localtime', '-45 days')
        ORDER BY account_id, fetched_at ASC`
     );
-    // 代理已逐笔记账（source='proxy' 带权威 cost）的日期不可被余额差值覆盖
-    const proxyDays = await d.select<{ account_id: number; date: string }[]>(
-      `SELECT DISTINCT account_id, date FROM daily_usage
-       WHERE source = 'proxy' AND cost > 0.0001
-         AND date >= date('now', 'localtime', '-45 days')`
-    );
-    const proxySet = new Set(proxyDays.map((p) => `${p.account_id}|${p.date}`));
 
-    // 按账户+天分组，取首末
-    const byAcc: Record<number, { day: string; first: number; last: number }[]> = {};
+    // 按账户+天分组，取首末；用「逐段下降求和」而不是简单首末差，
+    // 这样中途充值不会抹掉之前的消耗（充值回升时起点重置）。
+    const byAcc: Record<number, { day: string; consumed: number; prev: number | null }[]> = {};
     for (const r of rows) {
       const arr = (byAcc[r.account_id] ??= []);
-      const found = arr.find((x) => x.day === r.day);
-      if (found) {
-        found.last = r.balance;
+      let found = arr.find((x) => x.day === r.day);
+      if (!found) {
+        found = { day: r.day, consumed: 0, prev: null };
+        arr.push(found);
+      }
+      if (found.prev === null) {
+        found.prev = r.balance;
       } else {
-        arr.push({ day: r.day, first: r.balance, last: r.balance });
+        // 只有下降才计入消耗；上升（充值）重置起点，避免把充值算成消耗或抹掉历史
+        if (r.balance < found.prev!) {
+          found.consumed += found.prev! - r.balance;
+        }
+        found.prev = r.balance;
       }
     }
     for (const [accIdStr, days] of Object.entries(byAcc)) {
       const accId = Number(accIdStr);
       for (const dayInfo of days) {
-        // 该日已有代理记账的真实消耗，保留代理值
-        if (proxySet.has(`${accId}|${dayInfo.day}`)) continue;
-        const diff = dayInfo.first - dayInfo.last; // 正 = 消耗
-        if (diff > 0.0001) {
-          await d.execute(
-            `INSERT INTO daily_usage (account_id, date, cost, source)
-             VALUES ($1, $2, $3, 'balance')
-             ON CONFLICT(account_id, date) DO UPDATE SET cost = excluded.cost, source = 'balance'`,
-            [accId, dayInfo.day, diff]
-          );
-        }
+        const diff = dayInfo.consumed; // 正 = 消耗
+        if (diff <= 0.0001) continue; // 充值日或余额未变，跳过
+        // 余额差值 = 平台真实扣费，是权威值；覆盖代理记账的 token×单价估算
+        // （代理估算会因缓存折扣/价格变动/漏记而偏差；余额差值最准）
+        await d.execute(
+          `INSERT INTO daily_usage (account_id, date, cost, source)
+           VALUES ($1, $2, $3, 'balance')
+           ON CONFLICT(account_id, date) DO UPDATE SET cost = excluded.cost, source = 'balance'`,
+          [accId, dayInfo.day, diff]
+        );
       }
     }
   } catch (e) {
