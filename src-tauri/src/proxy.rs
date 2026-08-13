@@ -457,9 +457,22 @@ async fn handle_catch(st: ProxyState, provider: String, rest: String, req: Reque
 }
 
 /// OpenAI 平台流式请求自动补充 stream_options.include_usage
-/// （否则 OpenRouter 等平台不会在流中返回 usage，导致漏记）
+/// （否则 OpenRouter / SiliconFlow / Moonshot 等平台不会在流中返回 usage，导致漏记）
+///
+/// 注意：Anthropic 协议（/v1/messages）不走此逻辑，其 usage 由 message_start/message_delta 携带。
+/// 只对 OpenAI 兼容平台的 chat/completions 生效，避免改坏其它端点。
 fn inject_stream_options(provider: &str, rest: &str, is_stream: bool, body: Vec<u8>) -> Vec<u8> {
-    if provider != "openai" || !is_stream || rest != "chat/completions" || body.is_empty() {
+    // OpenAI 兼容平台：deepseek / openai / openrouter / siliconflow / moonshot / zhipu
+    const OPENAI_COMPAT: &[&str] = &[
+        "deepseek",
+        "openai",
+        "openrouter",
+        "siliconflow",
+        "moonshot",
+        "zhipu",
+    ];
+    if !OPENAI_COMPAT.contains(&provider) || !is_stream || rest != "chat/completions" || body.is_empty()
+    {
         return body;
     }
     match serde_json::from_slice::<Value>(&body) {
@@ -659,7 +672,8 @@ fn parse_usage_value(u: &Value) -> Option<UsageInfo> {
                     .and_then(|d| d.get("cached_tokens"))
                     .and_then(|v| v.as_i64())
             })
-            .unwrap_or(0);
+            .unwrap_or(0)
+            .min(input); // 防御：缓存命中不可能超过输入 token
         return Some(UsageInfo {
             input,
             output,
@@ -672,15 +686,18 @@ fn parse_usage_value(u: &Value) -> Option<UsageInfo> {
             .get("output_tokens")
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
-        let cache_read = u.get("cache_read_input_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
-        let cache_creation = u
-            .get("cache_creation_input_tokens")
+        // 只计「本次读取的缓存」cache_read_input_tokens。
+        // 注意：cache_creation_input_tokens 在部分平台（如 DeepSeek Anthropic 兼容端点）
+        // 会被实现为「会话级累计值」而非本次增量，若计入会导致 cache_hit 异常放大、费用为负。
+        let cache_hit = u
+            .get("cache_read_input_tokens")
             .and_then(|v| v.as_i64())
-            .unwrap_or(0);
+            .unwrap_or(0)
+            .min(input); // 防御：缓存命中不可能超过输入 token
         return Some(UsageInfo {
             input,
             output,
-            cache_hit: cache_read + cache_creation,
+            cache_hit,
         });
     }
     None
@@ -731,7 +748,11 @@ async fn record_usage_to_db(st: &ProxyState, provider: &str, api_key: &str, mode
             .and_then(|v: String| v.parse().ok());
     }
 
+    // 3. 仍未匹配到：记账丢失，打日志提示用户（token 统计静默丢失是最难发现的 bug）
     let Some(account_id) = account_id else {
+        eprintln!(
+            "[proxy] ⚠️ 记账失败：{provider} 请求的 API Key 未匹配到任何已启用账户，且未设置默认记账账户（proxy_account_id）。请求将被转发但 token/费用不会统计。请到设置页选择默认记账账户。"
+        );
         return;
     };
 
@@ -763,12 +784,13 @@ async fn record_usage_to_db(st: &ProxyState, provider: &str, api_key: &str, mode
 
     let _ = sqlx::query(
         "INSERT INTO daily_usage (account_id, date, input_tokens, output_tokens, cache_hit_tokens, cost, cost_estimated, source)
-         VALUES (?1, date('now','localtime'), ?2, ?3, ?4, 0, ?5, 'proxy')
+         VALUES (?1, date('now','localtime'), ?2, ?3, ?4, ?5, ?5, 'proxy')
          ON CONFLICT(account_id, date) DO UPDATE SET
            input_tokens = input_tokens + excluded.input_tokens,
            output_tokens = output_tokens + excluded.output_tokens,
            cache_hit_tokens = cache_hit_tokens + excluded.cache_hit_tokens,
            cost_estimated = cost_estimated + excluded.cost_estimated,
+           cost = daily_usage.cost + excluded.cost,
            source = 'proxy'",
     )
     .bind(account_id)
@@ -840,7 +862,7 @@ mod tests {
 
     fn anthropic_start(input: i64, cache: i64) -> Vec<u8> {
         format!(
-            "event: message_start\ndata: {{\"type\":\"message_start\",\"message\":{{\"usage\":{{\"input_tokens\":{input},\"cache_creation_input_tokens\":{cache},\"cache_read_input_tokens\":0}}}}}}\n\n",
+            "event: message_start\ndata: {{\"type\":\"message_start\",\"message\":{{\"usage\":{{\"input_tokens\":{input},\"cache_read_input_tokens\":{cache},\"cache_creation_input_tokens\":99999999}}}}}}\n\n",
             input = input, cache = cache
         )
         .into_bytes()
@@ -910,22 +932,45 @@ mod tests {
 
     #[test]
     fn anthropic_cache_parsing() {
-        let json = br#"{"usage":{"input_tokens":7,"output_tokens":9,"cache_read_input_tokens":3,"cache_creation_input_tokens":4}}"#;
+        let json = br#"{"usage":{"input_tokens":7,"output_tokens":9,"cache_read_input_tokens":3,"cache_creation_input_tokens":99999999}}"#;
         let v: Value = serde_json::from_slice(json).unwrap();
         let u = parse_usage_value(v.get("usage").unwrap()).unwrap();
         assert_eq!(u.input, 7);
         assert_eq!(u.output, 9);
-        assert_eq!(u.cache_hit, 7);
+        // 只计 cache_read（3），cache_creation（巨大累计值）不计入
+        assert_eq!(u.cache_hit, 3);
+
+        // cache_read 超过 input 时被防御性截断（不可能命中比输入还多）
+        let json2 = br#"{"usage":{"input_tokens":5,"output_tokens":9,"cache_read_input_tokens":999}}"#;
+        let v2: Value = serde_json::from_slice(json2).unwrap();
+        let u2 = parse_usage_value(v2.get("usage").unwrap()).unwrap();
+        assert_eq!(u2.cache_hit, 5);
     }
 
     #[test]
     fn inject_only_openai_stream_chat() {
+        // OpenAI 平台：注入
         let body = br#"{"model":"gpt-4o","stream":true,"messages":[]}"#.to_vec();
         let out = inject_stream_options("openai", "chat/completions", true, body);
         assert!(out.windows(14).any(|w| w == b"stream_options".as_slice()));
 
+        // OpenAI 兼容平台（deepseek / openrouter / siliconflow 等）：也应注入
         let body2 = br#"{"model":"deepseek-chat","stream":true}"#.to_vec();
         let out2 = inject_stream_options("deepseek", "chat/completions", true, body2);
-        assert!(!out2.windows(14).any(|w| w == b"stream_options".as_slice()));
+        assert!(out2.windows(14).any(|w| w == b"stream_options".as_slice()));
+
+        let body3 = br#"{"model":"deepseek-ai/DeepSeek-V3","stream":true}"#.to_vec();
+        let out3 = inject_stream_options("siliconflow", "chat/completions", true, body3);
+        assert!(out3.windows(14).any(|w| w == b"stream_options".as_slice()));
+
+        // Anthropic 格式（messages）：不注入（不是 chat/completions）
+        let body4 = br#"{"model":"deepseek-chat","stream":true}"#.to_vec();
+        let out4 = inject_stream_options("deepseek", "messages", true, body4);
+        assert!(!out4.windows(14).any(|w| w == b"stream_options".as_slice()));
+
+        // 非流式：不注入
+        let body5 = br#"{"model":"gpt-4o","stream":false}"#.to_vec();
+        let out5 = inject_stream_options("openai", "chat/completions", false, body5);
+        assert!(!out5.windows(14).any(|w| w == b"stream_options".as_slice()));
     }
 }

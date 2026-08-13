@@ -101,7 +101,12 @@ INSERT OR IGNORE INTO price_table (provider_id, model, input_price, output_price
 ('deepseek', 'deepseek-chat', 2.0, 3.0, 0.2, 'CNY'),
 ('deepseek', 'deepseek-v4-flash', 2.0, 3.0, 0.2, 'CNY'),
 ('deepseek', 'deepseek-v4-pro', 2.0, 3.0, 0.2, 'CNY');
+`;
 
+// 一次性迁移：回填历史费用（按默认 DeepSeek 单价估算历史 proxy 记录）
+// 旧版 SCHEMA 每次启动都执行这个 UPDATE，可能用写死的单价覆盖实际费用；
+// 改为仅首次建库后执行一次（通过 settings.migration_backfill_v1 标记）。
+const MIGRATION_BACKFILL_V1 = `
 -- 回填历史费用（按默认 DeepSeek 单价估算历史 proxy 记录）
 UPDATE daily_usage
 SET cost = (input_tokens - cache_hit_tokens) * 2.0 / 1000000
@@ -121,6 +126,20 @@ export async function initDb(): Promise<Database> {
     await db.execute("ALTER TABLE daily_usage ADD COLUMN cost_estimated REAL DEFAULT 0");
   } catch {
     // 列已存在，忽略
+  }
+  // 一次性历史费用回填（仅首次，避免每次启动都用死单价覆盖）
+  try {
+    const rows = await db.select<{ value: string }[]>(
+      "SELECT value FROM settings WHERE key = 'migration_backfill_v1'"
+    );
+    if (rows.length === 0) {
+      await db.execute(MIGRATION_BACKFILL_V1);
+      await db.execute(
+        "INSERT INTO settings (key, value) VALUES ('migration_backfill_v1', 'done') ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+      );
+    }
+  } catch {
+    // 迁移失败不阻塞启动
   }
   return db;
 }

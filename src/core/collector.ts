@@ -121,16 +121,28 @@ export async function collectAll(): Promise<{ ok: number; failed: number; errors
   return { ok, failed, errors };
 }
 
-let timer: ReturnType<typeof setInterval> | null = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
+let scheduled = false; // 防止 async schedule 竞态导致重复定时器
 
 /**
  * 启动定时采集。
  * 面板窗口与悬浮窗都会调用，但二者共享同一 SQLite 里的 last_collect_at，
  * 因此用「距上次采集是否超过间隔」做去重：先触发者写回时间戳，另一个窗口跳过本轮，
  * 保证任意窗口常驻时都会按时采集（全局单例采集）。
+ *
+ * 用递归 setTimeout 而非固定 setInterval：每次触发前重新读取 collect_interval_minutes，
+ * 使修改间隔设置后无需重启窗口即可生效（v0.1.4 之前写死 30 分钟，导致 1 分钟间隔不生效）。
  */
 export function startAutoCollect(): void {
-  if (timer) return;
+  if (timer || scheduled) return;
+  scheduled = true;
+  const schedule = async () => {
+    // 若已被 stop/setInterval 清理，不再自我续期
+    if (!scheduled) return;
+    const intervalMs = (await getCollectIntervalMinutes()) * 60 * 1000;
+    if (!scheduled) return; // 等待读取期间被停止
+    timer = setTimeout(run, intervalMs);
+  };
   const run = async () => {
     try {
       const intervalMs = (await getCollectIntervalMinutes()) * 60 * 1000;
@@ -140,22 +152,30 @@ export function startAutoCollect(): void {
       await collectAll();
     } catch (e) {
       console.error("自动采集失败", e);
+    } finally {
+      void schedule();
     }
   };
-  void run();
-  timer = setInterval(run, 30 * 60 * 1000); // 默认 30 分钟
+  void schedule();
 }
 
 /** 读取并调整采集间隔（分钟），返回当前生效间隔 */
 export async function setCollectIntervalMinutes(minutes: number): Promise<number> {
   const safe = Math.min(1440, Math.max(1, Math.floor(minutes)));
   await setSetting("collect_interval_minutes", String(safe));
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-  }
+  // 停止旧定时器并重新调度（scheduled 标记保证不产生双定时器）
+  stopAutoCollect();
   startAutoCollect();
   return safe;
+}
+
+/** 停止自动采集（仅供内部重调度使用） */
+function stopAutoCollect(): void {
+  if (timer) {
+    clearTimeout(timer);
+    timer = null;
+  }
+  scheduled = false;
 }
 
 export async function getCollectIntervalMinutes(): Promise<number> {
